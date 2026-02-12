@@ -225,17 +225,27 @@ class Member(models.Model):
     id = models.BigAutoField(primary_key=True)
     full_name = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=20, unique=True)
+    date_of_birth = models.DateField(null=True, blank=True, help_text="Date of birth for age calculation")
     gender = models.CharField(max_length=10, choices=Gender.choices)
     home_altar = models.ForeignKey(
         OrganizationUnit,
         on_delete=models.PROTECT,
         related_name='members',
-        limit_choices_to={'level': UnitLevel.ALTAR}
+        limit_choices_to={'level': UnitLevel.ALTAR},
+        help_text="Department/Altar the member belongs to"
     )
     membership_date = models.DateField(default=timezone.now)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    @property
+    def age(self):
+        """Calculate age from date of birth"""
+        if not self.date_of_birth:
+            return None
+        today = timezone.now().date()
+        return today.year - self.date_of_birth.year - ((today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day))
 
     class Meta:
         db_table = 'members'
