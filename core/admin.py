@@ -23,9 +23,9 @@ class UserAdmin(admin.ModelAdmin):
 
 @admin.register(Member)
 class MemberAdmin(admin.ModelAdmin):
-    list_display = ['full_name', 'phone_number', 'gender', 'home_altar', 'is_active']
-    list_filter = ['gender', 'is_active']
-    search_fields = ['full_name', 'phone_number']
+    list_display = ['full_name', 'phone_number', 'gender', 'serving_department', 'home_altar']
+    list_filter = ['gender', 'home_altar']
+    search_fields = ['full_name', 'phone_number', 'serving_department']
     raw_id_fields = ['home_altar']
 
 
