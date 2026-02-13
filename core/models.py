@@ -1,6 +1,12 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
+import datetime
+
+
+def get_today():
+    """Return today's date for default values"""
+    return datetime.date.today()
 
 
 # ============================================
@@ -227,7 +233,7 @@ class Member(models.Model):
     phone_number = models.CharField(max_length=20, unique=True, help_text="Contact phone number")
     gender = models.CharField(max_length=10, choices=Gender.choices, help_text="Gender of the member")
     serving_department = models.CharField(max_length=255, help_text="Department where the member serves", null=True, blank=True)
-    membership_date = models.DateField(default=timezone.now)
+    membership_date = models.DateField(default=get_today)
     date_of_birth = models.DateField(null=True, blank=True, help_text="Date of birth for age calculation")
     is_active = models.BooleanField(default=True)
     home_altar = models.ForeignKey(
