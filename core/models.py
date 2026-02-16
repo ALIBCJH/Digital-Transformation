@@ -59,6 +59,15 @@ class LeadershipEndReason(models.TextChoices):
     OTHER = 'OTHER', 'Other'
 
 
+class TransferReason(models.TextChoices):
+    """Reasons for member transfer"""
+    JOB_TRANSFER = 'JOB_TRANSFER', 'Job Transfer'
+    RELOCATION = 'RELOCATION', 'Relocation'
+    FAMILY_REASONS = 'FAMILY_REASONS', 'Family Reasons'
+    PERSONAL_CHOICE = 'PERSONAL_CHOICE', 'Personal Choice'
+    OTHER = 'OTHER', 'Other'
+
+
 # ============================================
 # ORGANIZATION STRUCTURE
 # ============================================
@@ -257,6 +266,54 @@ class Member(models.Model):
 
     def __str__(self):
         return f"{self.full_name} ({self.phone_number})"
+
+
+class MemberTransferHistory(models.Model):
+    """Track member transfers between altars"""
+    member = models.ForeignKey(
+        Member,
+        on_delete=models.CASCADE,
+        related_name='transfer_history'
+    )
+    from_altar = models.ForeignKey(
+        OrganizationUnit,
+        on_delete=models.PROTECT,
+        related_name='members_transferred_from'
+    )
+    to_altar = models.ForeignKey(
+        OrganizationUnit,
+        on_delete=models.PROTECT,
+        related_name='members_transferred_to',
+        null=True,
+        blank=True,
+        help_text="Destination altar (null if member is being deactivated)"
+    )
+    transfer_reason = models.CharField(
+        max_length=20,
+        choices=TransferReason.choices,
+        default=TransferReason.JOB_TRANSFER
+    )
+    transfer_date = models.DateField(default=get_today)
+    notes = models.TextField(null=True, blank=True)
+    processed_by = models.ForeignKey(
+        'User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='processed_transfers'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'member_transfer_history'
+        ordering = ['-transfer_date']
+        indexes = [
+            models.Index(fields=['member']),
+            models.Index(fields=['transfer_date']),
+        ]
+
+    def __str__(self):
+        destination = self.to_altar.name if self.to_altar else "Deactivated"
+        return f"{self.member.full_name}: {self.from_altar.name} → {destination}"
 
 
 # ============================================

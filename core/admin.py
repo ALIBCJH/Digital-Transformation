@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     OrganizationUnit, User, Member, Guest, AttendanceLog,
-    LeadershipHistory, ServiceSchedule, DataEntryQuota, AltarStatistics
+    LeadershipHistory, ServiceSchedule, DataEntryQuota, AltarStatistics,
+    MemberTransferHistory
 )
 
 
@@ -81,3 +82,13 @@ class AltarStatisticsAdmin(admin.ModelAdmin):
     search_fields = ['altar__name']
     raw_id_fields = ['altar']
     date_hierarchy = 'date'
+
+
+@admin.register(MemberTransferHistory)
+class MemberTransferHistoryAdmin(admin.ModelAdmin):
+    list_display = ['member', 'from_altar', 'to_altar', 'transfer_reason', 'transfer_date', 'processed_by']
+    list_filter = ['transfer_reason', 'transfer_date']
+    search_fields = ['member__full_name', 'from_altar__name', 'to_altar__name']
+    raw_id_fields = ['member', 'from_altar', 'to_altar', 'processed_by']
+    date_hierarchy = 'transfer_date'
+    readonly_fields = ['created_at']
