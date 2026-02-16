@@ -1,44 +1,49 @@
 from rest_framework import serializers
-from core.models import User, Member, Guest, OrganizationUnit, MemberTransferHistory, AttendanceLog
+from core.models import User, Member, Guest, OrganizationUnit
+
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
     password2 = serializers.CharField(write_only=True, min_length=8)
     organizational_unit = serializers.CharField(
-        required=False, 
-        allow_null=True, 
+        required=False,
+        allow_null=True,
         allow_blank=True,
         help_text="Name of the organizational unit this admin will manage (region, sub-region, or altar)"
     )
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'password2', 'phone_number', 'first_name', 'last_name', 'organizational_unit']
+        fields = [
+            'username', 'email', 'password', 'password2',
+            'phone_number', 'first_name', 'last_name', 'organizational_unit'
+        ]
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
             raise serializers.ValidationError({"password": "Passwords don't match"})
         return attrs
-    
+
     def validate_organizational_unit(self, value):
         """Look up the organizational unit by name if provided"""
         if value:
             try:
                 org_unit = OrganizationUnit.objects.get(
-                    name=value, 
+                    name=value,
                     level__in=['REGION', 'SUB_REGION', 'ALTAR']
                 )
                 return org_unit
             except OrganizationUnit.DoesNotExist:
                 raise serializers.ValidationError(
-                    f"Organizational unit '{value}' does not exist. Must be a valid region, sub-region, or altar name."
+                    f"Organizational unit '{value}' does not exist. "
+                    f"Must be a valid region, sub-region, or altar name."
                 )
         return None
 
     def create(self, validated_data):
         validated_data.pop('password2')
         org_unit = validated_data.pop('organizational_unit', None)
-        
+
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data.get('email', ''),
@@ -56,13 +61,14 @@ class RegisterSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     organizational_unit_name = serializers.CharField(source='organizational_unit.name', read_only=True)
     organizational_unit_level = serializers.CharField(source='organizational_unit.level', read_only=True)
-    
+
     class Meta:
         model = User
         fields = [
-            'id', 'username', 'email', 'first_name', 'last_name', 
+            'id', 'username', 'email', 'first_name', 'last_name',
             'is_staff', 'is_superuser', 'organizational_unit_name', 'organizational_unit_level'
         ]
+
 
 class MemberSerializer(serializers.ModelSerializer):
     # Accept altar name as string for input, return it for output
@@ -83,7 +89,7 @@ class MemberSerializer(serializers.ModelSerializer):
             'created_at'
         ]
         read_only_fields = ['id', 'created_at']
-    
+
     def validate_home_altar(self, value):
         """Look up the altar by name and validate it's an ALTAR level unit"""
         try:
@@ -91,7 +97,7 @@ class MemberSerializer(serializers.ModelSerializer):
             return altar
         except OrganizationUnit.DoesNotExist:
             raise serializers.ValidationError(f"Altar '{value}' does not exist. Please provide a valid altar name.")
-    
+
     def validate_phone_number(self, value):
         """Ensure the phone number is valid"""
         if value:
@@ -100,7 +106,7 @@ class MemberSerializer(serializers.ModelSerializer):
             if not cleaned.isdigit():
                 raise serializers.ValidationError("Phone number must contain only digits, spaces, hyphens, or plus sign.")
         return value
-    
+
     def to_representation(self, instance):
         """Return altar name instead of ID when reading"""
         representation = super().to_representation(instance)
@@ -110,7 +116,7 @@ class MemberSerializer(serializers.ModelSerializer):
 
 class GuestSerializer(serializers.ModelSerializer):
     """Serializer for guest onboarding"""
-    
+
     class Meta:
         model = Guest
         fields = [
@@ -124,7 +130,7 @@ class GuestSerializer(serializers.ModelSerializer):
             'created_at'
         ]
         read_only_fields = ['id', 'first_visit_date', 'visit_count', 'created_at']
-    
+
     def validate_phone_number(self, value):
         """Ensure the phone number is valid if provided"""
         if value:
@@ -138,14 +144,18 @@ class GuestSerializer(serializers.ModelSerializer):
 class MemberTransferSerializer(serializers.Serializer):
     """Serializer for member transfer/offboarding"""
     member_id = serializers.IntegerField(help_text="ID of the member to transfer")
-    to_altar = serializers.CharField(required=False, allow_null=True, allow_blank=True, 
-                                     help_text="Name of destination altar (leave empty to deactivate member)")
+    to_altar = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        help_text="Name of destination altar (leave empty to deactivate member)"
+    )
     transfer_reason = serializers.ChoiceField(
         choices=['JOB_TRANSFER', 'RELOCATION', 'FAMILY_REASONS', 'PERSONAL_CHOICE', 'OTHER'],
         default='JOB_TRANSFER'
     )
     notes = serializers.CharField(required=False, allow_blank=True, help_text="Additional notes about the transfer")
-    
+
     def validate_member_id(self, value):
         """Check if member exists"""
         try:
@@ -155,7 +165,7 @@ class MemberTransferSerializer(serializers.Serializer):
             return value
         except Member.DoesNotExist:
             raise serializers.ValidationError("Member not found.")
-    
+
     def validate_to_altar(self, value):
         """Look up the destination altar if provided"""
         if value:
@@ -170,7 +180,7 @@ class MemberTransferSerializer(serializers.Serializer):
 class MemberListSerializer(serializers.ModelSerializer):
     """Simplified serializer for member list display"""
     home_altar_name = serializers.CharField(source='home_altar.name', read_only=True)
-    
+
     class Meta:
         model = Member
         fields = [
@@ -203,7 +213,7 @@ class BulkAttendanceSerializer(serializers.Serializer):
         child=AttendanceRecordSerializer(),
         help_text="List of member attendance records"
     )
-    
+
     def validate_altar(self, value):
         """Validate that the altar exists"""
         try:
@@ -211,14 +221,14 @@ class BulkAttendanceSerializer(serializers.Serializer):
             return altar
         except OrganizationUnit.DoesNotExist:
             raise serializers.ValidationError(f"Altar '{value}' does not exist.")
-    
+
     def validate_attendance_records(self, value):
         """Validate that all member IDs exist and are active"""
         member_ids = [record['member_id'] for record in value]
         existing_members = Member.objects.filter(id__in=member_ids, is_active=True).values_list('id', flat=True)
-        
+
         invalid_ids = set(member_ids) - set(existing_members)
         if invalid_ids:
             raise serializers.ValidationError(f"Invalid or inactive member IDs: {list(invalid_ids)}")
-        
+
         return value

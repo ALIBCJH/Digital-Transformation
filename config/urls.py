@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from core.views import (
-    RegisterView, MemberCreateView, AltarListView, 
+    RegisterView, MemberCreateView, AltarListView,
     GuestCreateView, MemberTransferView, LogoutView,
     MemberListView, BulkAttendanceView
 )

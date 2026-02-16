@@ -17,13 +17,13 @@ class ModelTests(TestCase):
             level='ALTAR',
             is_active=True
         )
-    
+
     def test_organization_unit_creation(self):
         """Test organization unit can be created"""
         self.assertEqual(self.organization_unit.name, 'Test Altar')
         self.assertEqual(self.organization_unit.level, 'ALTAR')
         self.assertTrue(self.organization_unit.is_active)
-    
+
     def test_member_creation(self):
         """Test member can be created"""
         member = Member.objects.create(
@@ -49,7 +49,7 @@ class APITests(APITestCase):
             level='ALTAR',
             is_active=True
         )
-    
+
     def test_register_user(self):
         """Test user registration endpoint"""
         data = {
@@ -65,17 +65,17 @@ class APITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn('user', response.data)
         self.assertEqual(response.data['user']['username'], 'testuser')
-    
+
     def test_login_user(self):
         """Test user login endpoint"""
         # Create user first
-        user = User.objects.create_user(
+        User.objects.create_user(
             username='testuser',
             email='test@example.com',
             password='testpass123',
             phone_number='+254700000001'
         )
-        
+
         # Try to login
         data = {
             'username': 'testuser',
@@ -85,12 +85,12 @@ class APITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('access', response.data)
         self.assertIn('refresh', response.data)
-    
+
     def test_altar_list_requires_authentication(self):
         """Test altar list endpoint requires authentication"""
         response = self.client.get('/api/altars/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-    
+
     def test_altar_list_with_authentication(self):
         """Test altar list endpoint with authentication"""
         # Create and authenticate user with organizational unit
@@ -102,13 +102,13 @@ class APITests(APITestCase):
             organizational_unit=self.altar
         )
         self.client.force_authenticate(user=user)
-        
+
         # Get altars
         response = self.client.get('/api/altars/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('altars', response.data)
         self.assertEqual(response.data['count'], 1)
-    
+
     def test_member_create_requires_authentication(self):
         """Test member creation requires authentication"""
         data = {
@@ -120,7 +120,7 @@ class APITests(APITestCase):
         }
         response = self.client.post('/api/members/create/', data, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-    
+
     def test_member_create_with_authentication(self):
         """Test member creation with authentication"""
         # Create and authenticate user with organizational unit
@@ -132,7 +132,7 @@ class APITests(APITestCase):
             organizational_unit=self.altar
         )
         self.client.force_authenticate(user=user)
-        
+
         # Create member
         data = {
             'full_name': 'Test Member',
@@ -145,4 +145,3 @@ class APITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn('member', response.data)
         self.assertEqual(response.data['member']['full_name'], 'Test Member')
-

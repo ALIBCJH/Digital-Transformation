@@ -134,7 +134,7 @@ class User(AbstractUser):
     phone_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     # Fix for Django auth clash - override groups and user_permissions
     groups = models.ManyToManyField(
         'auth.Group',
@@ -164,12 +164,12 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.get_full_name()} ({self.email})"
-    
+
     def get_managed_units(self):
         """Get all organizational units this admin can manage (self + all descendants)"""
         if not self.organizational_unit:
             return OrganizationUnit.objects.none()
-        
+
         # Get all descendants of the admin's organizational unit
         def get_descendants(unit):
             descendants = [unit]
@@ -180,7 +180,7 @@ class User(AbstractUser):
         
         managed_units = get_descendants(self.organizational_unit)
         return OrganizationUnit.objects.filter(id__in=[u.id for u in managed_units])
-    
+
     def can_manage_unit(self, unit):
         """Check if this admin can manage the given organizational unit"""
         if not self.organizational_unit:
@@ -273,7 +273,12 @@ class Member(models.Model):
     full_name = models.CharField(max_length=255, help_text="Full name of the member")
     phone_number = models.CharField(max_length=20, unique=True, help_text="Contact phone number")
     gender = models.CharField(max_length=10, choices=Gender.choices, help_text="Gender of the member")
-    serving_department = models.CharField(max_length=255, help_text="Department where the member serves", null=True, blank=True)
+    serving_department = models.CharField(
+        max_length=255,
+        help_text="Department where the member serves",
+        null=True,
+        blank=True
+    )
     membership_date = models.DateField(default=get_today)
     date_of_birth = models.DateField(null=True, blank=True, help_text="Date of birth for age calculation")
     is_active = models.BooleanField(default=True)

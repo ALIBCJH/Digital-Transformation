@@ -43,7 +43,7 @@ class AttendanceLogAdmin(admin.ModelAdmin):
     search_fields = ['member__full_name', 'guest__full_name']
     raw_id_fields = ['member', 'guest', 'altar', 'sub_region', 'region', 'country', 'continent', 'recorded_by']
     date_hierarchy = 'service_date'
-    
+
     def get_person(self, obj):
         return obj.member.full_name if obj.member else obj.guest.full_name
     get_person.short_description = 'Person'
