@@ -82,10 +82,7 @@ def demo_organizational_scope():
 
     # Test Regional Admin permissions
     print("👤 Regional Admin (regional_admin):")
-    print(
-        f"   Assigned to: {
-            regional_admin.organizational_unit.name} ({
-            regional_admin.organizational_unit.level})")
+    print(f"   Assigned to: {regional_admin.organizational_unit.name} ({regional_admin.organizational_unit.level})")
     print("   Can manage: All altars within Nyeri Region")
 
     managed_units = regional_admin.get_managed_units()
@@ -93,21 +90,14 @@ def demo_organizational_scope():
     for unit in managed_units.filter(level='ALTAR').order_by('name'):
         print(f"      ✓ {unit.name}")
 
-    print(
-        f"\n   Can manage Mweiga Altar? {
-            regional_admin.can_manage_unit(mweiga_altar)} ✅")
-    print(
-        f"   Can manage Karatina Altar? {
-            regional_admin.can_manage_unit(karatina_altar)} ✅")
+    print(f"\n   Can manage Mweiga Altar? {regional_admin.can_manage_unit(mweiga_altar)} ✅")
+    print(f"   Can manage Karatina Altar? {regional_admin.can_manage_unit(karatina_altar)} ✅")
 
     print("\n" + "-" * 80 + "\n")
 
     # Test Altar Admin permissions
     print("👤 Altar Admin (mweiga_admin):")
-    print(
-        f"   Assigned to: {
-            altar_admin.organizational_unit.name} ({
-            altar_admin.organizational_unit.level})")
+    print(f"   Assigned to: {altar_admin.organizational_unit.name} ({altar_admin.organizational_unit.level})")
     print("   Can manage: Only Mweiga Altar")
 
     managed_units = altar_admin.get_managed_units()
@@ -115,12 +105,8 @@ def demo_organizational_scope():
     for unit in managed_units.filter(level='ALTAR').order_by('name'):
         print(f"      ✓ {unit.name}")
 
-    print(
-        f"\n   Can manage Mweiga Altar? {
-            altar_admin.can_manage_unit(mweiga_altar)} ✅")
-    print(
-        f"   Can manage Karatina Altar? {
-            altar_admin.can_manage_unit(karatina_altar)} ❌")
+    print(f"\n   Can manage Mweiga Altar? {altar_admin.can_manage_unit(mweiga_altar)} ✅")
+    print(f"   Can manage Karatina Altar? {altar_admin.can_manage_unit(karatina_altar)} ❌")
 
     print("\n" + "=" * 80)
     print("HOW IT WORKS IN API ENDPOINTS")
