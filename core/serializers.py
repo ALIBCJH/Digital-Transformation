@@ -4,18 +4,41 @@ from core.models import User, Member, Guest, OrganizationUnit, MemberTransferHis
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
     password2 = serializers.CharField(write_only=True, min_length=8)
+    organizational_unit = serializers.CharField(
+        required=False, 
+        allow_null=True, 
+        allow_blank=True,
+        help_text="Name of the organizational unit this admin will manage (region, sub-region, or altar)"
+    )
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'password2', 'phone_number', 'first_name', 'last_name']
+        fields = ['username', 'email', 'password', 'password2', 'phone_number', 'first_name', 'last_name', 'organizational_unit']
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
             raise serializers.ValidationError({"password": "Passwords don't match"})
         return attrs
+    
+    def validate_organizational_unit(self, value):
+        """Look up the organizational unit by name if provided"""
+        if value:
+            try:
+                org_unit = OrganizationUnit.objects.get(
+                    name=value, 
+                    level__in=['REGION', 'SUB_REGION', 'ALTAR']
+                )
+                return org_unit
+            except OrganizationUnit.DoesNotExist:
+                raise serializers.ValidationError(
+                    f"Organizational unit '{value}' does not exist. Must be a valid region, sub-region, or altar name."
+                )
+        return None
 
     def create(self, validated_data):
         validated_data.pop('password2')
+        org_unit = validated_data.pop('organizational_unit', None)
+        
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data.get('email', ''),
@@ -23,16 +46,23 @@ class RegisterSerializer(serializers.ModelSerializer):
             phone_number=validated_data['phone_number'],
             first_name=validated_data.get('first_name', ''),
             last_name=validated_data.get('last_name', ''),
+            organizational_unit=org_unit,
             is_staff=True,
-            is_superuser=True
+            is_superuser=False  # Regular admins are not superusers
         )
         return user
 
 
 class UserSerializer(serializers.ModelSerializer):
+    organizational_unit_name = serializers.CharField(source='organizational_unit.name', read_only=True)
+    organizational_unit_level = serializers.CharField(source='organizational_unit.level', read_only=True)
+    
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_staff', 'is_superuser']
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name', 
+            'is_staff', 'is_superuser', 'organizational_unit_name', 'organizational_unit_level'
+        ]
 
 class MemberSerializer(serializers.ModelSerializer):
     # Accept altar name as string for input, return it for output

@@ -122,6 +122,15 @@ class User(AbstractUser):
         null=True,
         blank=True
     )
+    # Organizational scope for admin permissions
+    organizational_unit = models.ForeignKey(
+        OrganizationUnit,
+        on_delete=models.PROTECT,
+        related_name='admin_users',
+        null=True,
+        blank=True,
+        help_text='The organizational unit this admin manages (region, sub-region, or altar)'
+    )
     phone_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -150,10 +159,33 @@ class User(AbstractUser):
             models.Index(fields=['phone_number']),
             models.Index(fields=['email']),
             models.Index(fields=['home_altar']),
+            models.Index(fields=['organizational_unit']),
         ]
 
     def __str__(self):
         return f"{self.get_full_name()} ({self.email})"
+    
+    def get_managed_units(self):
+        """Get all organizational units this admin can manage (self + all descendants)"""
+        if not self.organizational_unit:
+            return OrganizationUnit.objects.none()
+        
+        # Get all descendants of the admin's organizational unit
+        def get_descendants(unit):
+            descendants = [unit]
+            children = OrganizationUnit.objects.filter(parent=unit)
+            for child in children:
+                descendants.extend(get_descendants(child))
+            return descendants
+        
+        managed_units = get_descendants(self.organizational_unit)
+        return OrganizationUnit.objects.filter(id__in=[u.id for u in managed_units])
+    
+    def can_manage_unit(self, unit):
+        """Check if this admin can manage the given organizational unit"""
+        if not self.organizational_unit:
+            return False
+        return unit in self.get_managed_units()
 
 
 class OTPCode(models.Model):

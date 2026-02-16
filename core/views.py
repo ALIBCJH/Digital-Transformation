@@ -10,6 +10,10 @@ from .serializers import (
     GuestSerializer, MemberTransferSerializer, MemberListSerializer,
     BulkAttendanceSerializer
 )
+from .permissions import (
+    HasOrganizationalScope, CanManageMembers, CanManageGuests,
+    CanRecordAttendance, CanTransferMembers
+)
 
 
 class RegisterView(generics.CreateAPIView):
@@ -30,14 +34,22 @@ class RegisterView(generics.CreateAPIView):
 
 
 class MemberCreateView(generics.CreateAPIView):
-    """Create new church members"""
+    """Create new church members (filtered by organizational scope)"""
     queryset = Member.objects.all()
     serializer_class = MemberSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasOrganizationalScope, CanManageMembers]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        
+        # Validate that the altar is within admin's scope
+        altar = serializer.validated_data.get('home_altar')
+        if not request.user.is_superuser and not request.user.can_manage_unit(altar):
+            return Response({
+                "error": f"You don't have permission to create members for '{altar.name}'. You can only manage altars within your organizational scope."
+            }, status=status.HTTP_403_FORBIDDEN)
+        
         member = serializer.save()
         
         return Response({
@@ -47,11 +59,18 @@ class MemberCreateView(generics.CreateAPIView):
 
 
 class AltarListView(generics.ListAPIView):
-    """List all available altars"""
-    permission_classes = [IsAuthenticated]
+    """List all available altars within admin's organizational scope"""
+    permission_classes = [IsAuthenticated, HasOrganizationalScope]
 
     def get(self, request, *args, **kwargs):
-        altars = OrganizationUnit.objects.filter(level='ALTAR', is_active=True).values('id', 'name')
+        # Superusers see all altars
+        if request.user.is_superuser:
+            altars = OrganizationUnit.objects.filter(level='ALTAR', is_active=True).values('id', 'name')
+        else:
+            # Regular admins only see altars within their scope
+            managed_units = request.user.get_managed_units()
+            altars = managed_units.filter(level='ALTAR', is_active=True).values('id', 'name')
+        
         return Response({
             "count": altars.count(),
             "altars": list(altars)
@@ -59,10 +78,10 @@ class AltarListView(generics.ListAPIView):
 
 
 class GuestCreateView(generics.CreateAPIView):
-    """Onboard new guests/visitors"""
+    """Onboard new guests/visitors (filtered by organizational scope)"""
     queryset = Guest.objects.all()
     serializer_class = GuestSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasOrganizationalScope, CanManageGuests]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -76,8 +95,8 @@ class GuestCreateView(generics.CreateAPIView):
 
 
 class MemberTransferView(APIView):
-    """Transfer member to another altar or deactivate them"""
-    permission_classes = [IsAuthenticated]
+    """Transfer member to another altar or deactivate them (filtered by organizational scope)"""
+    permission_classes = [IsAuthenticated, HasOrganizationalScope, CanTransferMembers]
     
     @transaction.atomic
     def post(self, request):
@@ -92,6 +111,18 @@ class MemberTransferView(APIView):
         # Get the member
         member = Member.objects.get(id=member_id)
         from_altar = member.home_altar
+        
+        # Double-check permissions (already checked in permission class, but belt and suspenders)
+        if not request.user.is_superuser:
+            if not request.user.can_manage_unit(from_altar):
+                return Response({
+                    "error": "You don't have permission to transfer members from this altar."
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            if to_altar and not request.user.can_manage_unit(to_altar):
+                return Response({
+                    "error": "You don't have permission to transfer members to this altar."
+                }, status=status.HTTP_403_FORBIDDEN)
         
         # Create transfer history record
         transfer = MemberTransferHistory.objects.create(
@@ -157,13 +188,21 @@ class LogoutView(APIView):
 
 
 class MemberListView(generics.ListAPIView):
-    """List all active members for attendance marking"""
+    """List all active members for attendance marking (filtered by organizational scope)"""
     serializer_class = MemberListSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasOrganizationalScope]
     
     def get_queryset(self):
-        """Get active members, optionally filtered by altar"""
+        """Get active members within admin's organizational scope"""
         queryset = Member.objects.filter(is_active=True).select_related('home_altar')
+        
+        # Superusers see all members
+        if self.request.user.is_superuser:
+            pass  # No filtering needed
+        else:
+            # Regular admins only see members within their scope
+            managed_units = self.request.user.get_managed_units()
+            queryset = queryset.filter(home_altar__in=managed_units)
         
         # Optional filter by altar
         altar_name = self.request.query_params.get('altar', None)
@@ -174,8 +213,8 @@ class MemberListView(generics.ListAPIView):
 
 
 class BulkAttendanceView(APIView):
-    """Record attendance for multiple members at once"""
-    permission_classes = [IsAuthenticated]
+    """Record attendance for multiple members at once (filtered by organizational scope)"""
+    permission_classes = [IsAuthenticated, HasOrganizationalScope, CanRecordAttendance]
     
     @transaction.atomic
     def post(self, request):
@@ -186,6 +225,12 @@ class BulkAttendanceView(APIView):
         service_date = serializer.validated_data['service_date']
         service_type = serializer.validated_data['service_type']
         attendance_records = serializer.validated_data['attendance_records']
+        
+        # Additional permission check for non-superusers
+        if not request.user.is_superuser and not request.user.can_manage_unit(altar):
+            return Response({
+                "error": f"You don't have permission to record attendance for '{altar.name}'. You can only record attendance for altars within your organizational scope."
+            }, status=status.HTTP_403_FORBIDDEN)
         
         # Get the organizational hierarchy for denormalization
         # Navigate up the hierarchy to get all parent levels
