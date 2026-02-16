@@ -13,7 +13,7 @@ class HasOrganizationalScope(permissions.BasePermission):
         # Superusers can do anything
         if request.user.is_superuser:
             return True
-        
+
         # User must be authenticated and have organizational_unit assigned
         return (
             request.user.is_authenticated and
@@ -47,7 +47,7 @@ class CanManageMembers(permissions.BasePermission):
         # Check if the member's altar is within admin's scope
         if hasattr(obj, 'home_altar'):
             return request.user.can_manage_unit(obj.home_altar)
-        
+
         return False
 
 

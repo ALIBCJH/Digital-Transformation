@@ -177,7 +177,7 @@ class User(AbstractUser):
             for child in children:
                 descendants.extend(get_descendants(child))
             return descendants
-        
+
         managed_units = get_descendants(self.organizational_unit)
         return OrganizationUnit.objects.filter(id__in=[u.id for u in managed_units])
 

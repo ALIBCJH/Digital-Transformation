@@ -9,7 +9,7 @@ User = get_user_model()
 
 class ModelTests(TestCase):
     """Test models are correctly configured"""
-    
+
     def setUp(self):
         """Set up test data"""
         self.organization_unit = OrganizationUnit.objects.create(
@@ -40,7 +40,7 @@ class ModelTests(TestCase):
 
 class APITests(APITestCase):
     """Test API endpoints"""
-    
+
     def setUp(self):
         """Set up test client and data"""
         self.client = APIClient()

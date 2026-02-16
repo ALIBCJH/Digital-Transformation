@@ -100,7 +100,7 @@ class GuestCreateView(generics.CreateAPIView):
 class MemberTransferView(APIView):
     """Transfer member to another altar or deactivate them (filtered by organizational scope)"""
     permission_classes = [IsAuthenticated, HasOrganizationalScope, CanTransferMembers]
-    
+
     @transaction.atomic
     def post(self, request):
         serializer = MemberTransferSerializer(data=request.data)
@@ -121,12 +121,12 @@ class MemberTransferView(APIView):
                 return Response({
                     "error": "You don't have permission to transfer members from this altar."
                 }, status=status.HTTP_403_FORBIDDEN)
-            
+
             if to_altar and not request.user.can_manage_unit(to_altar):
                 return Response({
                     "error": "You don't have permission to transfer members to this altar."
                 }, status=status.HTTP_403_FORBIDDEN)
-        
+
         # Create transfer history record
         transfer = MemberTransferHistory.objects.create(
             member=member,
@@ -169,7 +169,7 @@ class MemberTransferView(APIView):
 class LogoutView(APIView):
     """Logout endpoint - blacklist the refresh token"""
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request):
         try:
             refresh_token = request.data.get("refresh_token")
@@ -275,12 +275,12 @@ class BulkAttendanceView(APIView):
         # Prepare attendance logs
         attendance_logs = []
         members_present = []
-        
+
         for record in attendance_records:
             if record['attended']:
                 member = Member.objects.get(id=record['member_id'])
                 members_present.append(member.full_name)
-                
+
                 attendance_logs.append(
                     AttendanceLog(
                         member=member,
