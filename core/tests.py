@@ -93,12 +93,13 @@ class APITests(APITestCase):
     
     def test_altar_list_with_authentication(self):
         """Test altar list endpoint with authentication"""
-        # Create and authenticate user
+        # Create and authenticate user with organizational unit
         user = User.objects.create_user(
             username='testuser',
             email='test@example.com',
             password='testpass123',
-            phone_number='+254700000002'
+            phone_number='+254700000002',
+            organizational_unit=self.altar
         )
         self.client.force_authenticate(user=user)
         
@@ -122,12 +123,13 @@ class APITests(APITestCase):
     
     def test_member_create_with_authentication(self):
         """Test member creation with authentication"""
-        # Create and authenticate user
+        # Create and authenticate user with organizational unit
         user = User.objects.create_user(
             username='testuser',
             email='test@example.com',
             password='testpass123',
-            phone_number='+254700000003'
+            phone_number='+254700000003',
+            organizational_unit=self.altar
         )
         self.client.force_authenticate(user=user)
         
