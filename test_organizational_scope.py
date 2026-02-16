@@ -1,30 +1,32 @@
 """
 Test script to demonstrate organizational scope-based permissions
 
-This script shows how admins can only manage data within their assigned 
+This script shows how admins can only manage data within their assigned
 organizational units (Region, Sub-Region, or Altar).
 """
 
+from django.db import transaction
+from core.models import User, OrganizationUnit, Member
 import os
 import django
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
-from core.models import User, OrganizationUnit, Member
-from django.db import transaction
-
 
 def demo_organizational_scope():
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("ORGANIZATIONAL SCOPE PERMISSIONS DEMO")
-    print("="*80 + "\n")
-    
+    print("=" * 80 + "\n")
+
     # Get organizational units
     try:
-        nyeri_region = OrganizationUnit.objects.get(name="Nyeri Main Altar", level="REGION")
-        mweiga_altar = OrganizationUnit.objects.get(name="Mweiga Altar", level="ALTAR")
-        karatina_altar = OrganizationUnit.objects.get(name="Karatina Main Altar", level="ALTAR")
+        nyeri_region = OrganizationUnit.objects.get(
+            name="Nyeri Main Altar", level="REGION")
+        mweiga_altar = OrganizationUnit.objects.get(
+            name="Mweiga Altar", level="ALTAR")
+        karatina_altar = OrganizationUnit.objects.get(
+            name="Karatina Main Altar", level="ALTAR")
     except OrganizationUnit.DoesNotExist as e:
         print(f"❌ Error: {e}")
         print("Run 'python manage.py seed_altars' first!\n")
@@ -74,41 +76,55 @@ def demo_organizational_scope():
         else:
             print("ℹ️  Altar Admin already exists")
 
-    print("\n" + "-"*80)
+    print("\n" + "-" * 80)
     print("PERMISSION SCOPE BREAKDOWN")
-    print("-"*80 + "\n")
-    
+    print("-" * 80 + "\n")
+
     # Test Regional Admin permissions
     print("👤 Regional Admin (regional_admin):")
-    print(f"   Assigned to: {regional_admin.organizational_unit.name} ({regional_admin.organizational_unit.level})")
+    print(
+        f"   Assigned to: {
+            regional_admin.organizational_unit.name} ({
+            regional_admin.organizational_unit.level})")
     print(f"   Can manage: All altars within Nyeri Region")
-    
+
     managed_units = regional_admin.get_managed_units()
     print(f"   Accessible units: {managed_units.count()} total")
     for unit in managed_units.filter(level='ALTAR').order_by('name'):
         print(f"      ✓ {unit.name}")
 
-    print(f"\n   Can manage Mweiga Altar? {regional_admin.can_manage_unit(mweiga_altar)} ✅")
-    print(f"   Can manage Karatina Altar? {regional_admin.can_manage_unit(karatina_altar)} ✅")
+    print(
+        f"\n   Can manage Mweiga Altar? {
+            regional_admin.can_manage_unit(mweiga_altar)} ✅")
+    print(
+        f"   Can manage Karatina Altar? {
+            regional_admin.can_manage_unit(karatina_altar)} ✅")
 
-    print("\n" + "-"*80 + "\n")
+    print("\n" + "-" * 80 + "\n")
 
     # Test Altar Admin permissions
     print("👤 Altar Admin (mweiga_admin):")
-    print(f"   Assigned to: {altar_admin.organizational_unit.name} ({altar_admin.organizational_unit.level})")
+    print(
+        f"   Assigned to: {
+            altar_admin.organizational_unit.name} ({
+            altar_admin.organizational_unit.level})")
     print(f"   Can manage: Only Mweiga Altar")
-    
+
     managed_units = altar_admin.get_managed_units()
     print(f"   Accessible units: {managed_units.count()} total")
     for unit in managed_units.filter(level='ALTAR').order_by('name'):
         print(f"      ✓ {unit.name}")
 
-    print(f"\n   Can manage Mweiga Altar? {altar_admin.can_manage_unit(mweiga_altar)} ✅")
-    print(f"   Can manage Karatina Altar? {altar_admin.can_manage_unit(karatina_altar)} ❌")
+    print(
+        f"\n   Can manage Mweiga Altar? {
+            altar_admin.can_manage_unit(mweiga_altar)} ✅")
+    print(
+        f"   Can manage Karatina Altar? {
+            altar_admin.can_manage_unit(karatina_altar)} ❌")
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("HOW IT WORKS IN API ENDPOINTS")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     print("📝 Member Creation (POST /api/members/create/):")
     print("   ✅ Regional Admin: Can create members for ANY altar in Nyeri Region")
@@ -129,9 +145,9 @@ def demo_organizational_scope():
     print("   ✅ Mweiga Admin: Can ONLY transfer members FROM Mweiga Altar")
     print("   ❌ Mweiga Admin: CANNOT transfer members from other altars (403 Forbidden)")
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("LOGIN CREDENTIALS FOR TESTING")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     print("1️⃣  Regional Admin (Full Region Access):")
     print("   Username: regional_admin")
@@ -143,9 +159,9 @@ def demo_organizational_scope():
     print("   Password: password123")
     print("   Scope: Mweiga Altar only")
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("NEXT STEPS")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     print("1. Login with either admin:")
     print("   POST /api/login/")
@@ -165,7 +181,7 @@ def demo_organizational_scope():
     print("\n3. Test with Mweiga Admin trying to access Karatina Altar")
     print("   (Should return 403 Forbidden)")
 
-    print("\n" + "="*80 + "\n")
+    print("\n" + "=" * 80 + "\n")
 
 
 if __name__ == '__main__':
