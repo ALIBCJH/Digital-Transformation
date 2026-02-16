@@ -5,10 +5,10 @@ This script shows how admins can only manage data within their assigned
 organizational units (Region, Sub-Region, or Altar).
 """
 
-from django.db import transaction
-from core.models import User, OrganizationUnit, Member
 import os
 import django
+from django.db import transaction
+from core.models import User, OrganizationUnit
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
@@ -86,7 +86,7 @@ def demo_organizational_scope():
         f"   Assigned to: {
             regional_admin.organizational_unit.name} ({
             regional_admin.organizational_unit.level})")
-    print(f"   Can manage: All altars within Nyeri Region")
+    print("   Can manage: All altars within Nyeri Region")
 
     managed_units = regional_admin.get_managed_units()
     print(f"   Accessible units: {managed_units.count()} total")
@@ -108,7 +108,7 @@ def demo_organizational_scope():
         f"   Assigned to: {
             altar_admin.organizational_unit.name} ({
             altar_admin.organizational_unit.level})")
-    print(f"   Can manage: Only Mweiga Altar")
+    print("   Can manage: Only Mweiga Altar")
 
     managed_units = altar_admin.get_managed_units()
     print(f"   Accessible units: {managed_units.count()} total")
