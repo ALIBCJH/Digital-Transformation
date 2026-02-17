@@ -43,22 +43,27 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
+          cache-dependency-path: 'apps/backend/requirements.txt'
 
       - name: Install Dependencies
+        working-directory: ./apps/backend
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
           pip install flake8 safety bandit # Standard tooling
 
       - name: Linting (Code Style)
+        working-directory: ./apps/backend
         run: flake8 . --count --max-line-length=127 --statistics --exclude=venv,migrations
 
       - name: Security Audit (Packages & Code)
+        working-directory: ./apps/backend
         run: |
           safety check
           bandit -r . -ll
 
       - name: Run Django Tests
+        working-directory: ./apps/backend
         env:
           SECRET_KEY: "temporary-key-for-testing"
           DB_ENGINE: "django.db.backends.postgresql"
@@ -103,7 +108,7 @@ jobs:
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./apps/backend
           push: true # Now we are actually saving the "Artifact"
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

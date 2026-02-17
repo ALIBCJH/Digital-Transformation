@@ -1,24 +1,37 @@
-# DT - Django Attendance Tracking System
+# Digital Transformation - Modular Application
 
-## Setup Instructions
+A modular church management system with separate backend (Django API) and frontend applications.
 
-### Prerequisites
-- Python 3.8+
-- PostgreSQL 12+
-- pip and virtualenv
+## Project Structure
 
-### Installation
+```
+DT/
+├── apps/
+│   ├── backend/          # Django REST API
+│   │   ├── config/       # Django settings
+│   │   ├── core/         # Main application
+│   │   ├── manage.py
+│   │   ├── requirements.txt
+│   │   └── Dockerfile
+│   └── frontend/         # Frontend application (to be implemented)
+├── Infra/                # Infrastructure configuration
+├── .github/              # GitHub Actions workflows
+└── venv/                 # Python virtual environment
+```
 
-1. **Clone the repository**
+## Quick Start
+
+### Backend Setup
+
+1. **Navigate to backend directory**
    ```bash
-   git clone <repository-url>
-   cd DT
+   cd apps/backend
    ```
 
 2. **Create and activate virtual environment**
    ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   python3 -m venv ../../venv
+   source ../../venv/bin/activate  # On Windows: ..\..\venv\Scripts\activate
    ```
 
 3. **Install dependencies**
@@ -28,10 +41,10 @@
 
 4. **Set up environment variables**
    ```bash
-   cp .env.example .env
+   cp ../../.env.example ../../.env
    ```
    
-   Edit `.env` and update with your settings:
+   Edit `.env` at the root and update with your settings:
    - `SECRET_KEY`: Your Django secret key
    - `DB_PASSWORD`: Your PostgreSQL password
    - Other settings as needed
