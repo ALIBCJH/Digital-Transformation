@@ -1,24 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { mockAuth } from '../api/mockAuth';
 
 const Dashboard = () => {
-  const [user, setUser] = useState(null);
+  const user = mockAuth.getCurrentUser();
   const navigate = useNavigate();
 
   useEffect(() => {
-    const currentUser = mockAuth.getCurrentUser();
-    if (!currentUser) {
+    if (!user) {
       navigate('/login');
     }
-  }, [navigate]);
-
-  useEffect(() => {
-    const currentUser = mockAuth.getCurrentUser();
-    if (currentUser) {
-      setUser(currentUser);
-    }
-  }, []);
+  }, [user, navigate]);
 
   const handleLogout = () => {
     localStorage.clear();

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { mockAuth } from '../api/mockAuth';
 
 const AdminDashboard = () => {
-  const [user, setUser] = useState(null);
+  const user = mockAuth.getCurrentUser();
   const [activeTab, setActiveTab] = useState('register');
   const [members, setMembers] = useState([
     { id: 1, name: 'John Kamau', memberId: 'M001', altar: 'Altar 1', status: 'present' },
@@ -19,18 +19,10 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const currentUser = mockAuth.getCurrentUser();
-    if (!currentUser) {
+    if (!user) {
       navigate('/login');
     }
-  }, [navigate]);
-
-  useEffect(() => {
-    const currentUser = mockAuth.getCurrentUser();
-    if (currentUser) {
-      setUser(currentUser);
-    }
-  }, []);
+  }, [user, navigate]);
 
   const handleLogout = () => {
     localStorage.clear();
