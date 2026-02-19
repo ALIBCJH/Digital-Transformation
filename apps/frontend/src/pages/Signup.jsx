@@ -33,7 +33,7 @@ const Signup = () => {
     setLoading(true);
 
     try {
-      const { confirmPassword, ...signupData } = formData;
+      const { confirmPassword: _confirmPassword, ...signupData } = formData;
       const response = await mockAuth.signup(signupData);
       localStorage.setItem('access_token', response.access);
       localStorage.setItem('refresh_token', response.refresh);

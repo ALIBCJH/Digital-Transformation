@@ -10,10 +10,15 @@ const Dashboard = () => {
     const currentUser = mockAuth.getCurrentUser();
     if (!currentUser) {
       navigate('/login');
-    } else {
-      setUser(currentUser);
     }
   }, [navigate]);
+
+  useEffect(() => {
+    const currentUser = mockAuth.getCurrentUser();
+    if (currentUser) {
+      setUser(currentUser);
+    }
+  }, []);
 
   const handleLogout = () => {
     localStorage.clear();

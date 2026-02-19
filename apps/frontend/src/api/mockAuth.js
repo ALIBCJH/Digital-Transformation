@@ -81,7 +81,7 @@ export const mockAuth = {
     try {
       const userData = JSON.parse(atob(token));
       return userData;
-    } catch (e) {
+    } catch {
       return null;
     }
   },
