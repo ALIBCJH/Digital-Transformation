@@ -42,18 +42,18 @@ class NodeDetailSerializer(serializers.ModelSerializer):
     Full node details with parent, children, and breadcrumb.
     This is the STANDARD response format for all hierarchy views.
     """
-    
+
     # Related entities
     parent = NodeMinimalSerializer(read_only=True)
     children = serializers.SerializerMethodField()
     altars = AltarMinimalSerializer(many=True, read_only=True)
-    
+
     # Navigation
     breadcrumb = serializers.SerializerMethodField()
-    
+
     # Statistics
     stats = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = OrganizationNode
         fields = [
@@ -62,17 +62,17 @@ class NodeDetailSerializer(serializers.ModelSerializer):
             'breadcrumb', 'stats',
             'is_active', 'created_at'
         ]
-    
+
     def get_children(self, obj):
         """Get direct children nodes"""
         children = obj.get_children()
         return NodeMinimalSerializer(children, many=True).data
-    
+
     def get_breadcrumb(self, obj):
         """Get ancestor trail for navigation"""
         ancestors = obj.get_ancestors()
         return NodeBreadcrumbSerializer(ancestors, many=True).data
-    
+
     def get_stats(self, obj):
         """Aggregate statistics for this node"""
         return {
@@ -85,11 +85,11 @@ class NodeDetailSerializer(serializers.ModelSerializer):
 
 class AltarDetailSerializer(serializers.ModelSerializer):
     """Full altar details with organizational context"""
-    
+
     parent_node = NodeMinimalSerializer(read_only=True)
     breadcrumb = serializers.SerializerMethodField()
     stats = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Altar
         fields = [
@@ -98,7 +98,7 @@ class AltarDetailSerializer(serializers.ModelSerializer):
             'parent_node', 'breadcrumb', 'stats',
             'established_date', 'is_active'
         ]
-    
+
     def get_breadcrumb(self, obj):
         """Get organizational path to this altar"""
         ancestors = obj.parent_node.get_ancestors()
@@ -106,7 +106,7 @@ class AltarDetailSerializer(serializers.ModelSerializer):
         # Add parent node
         breadcrumb.append(NodeBreadcrumbSerializer(obj.parent_node).data)
         return breadcrumb
-    
+
     def get_stats(self, obj):
         """Altar statistics"""
         return {
@@ -120,7 +120,7 @@ class MemberListSerializer(serializers.ModelSerializer):
     """Member list with altar context"""
     altar_name = serializers.CharField(source='home_altar.name', read_only=True)
     altar_code = serializers.CharField(source='home_altar.code', read_only=True)
-    
+
     class Meta:
         model = Member
         fields = [
@@ -137,7 +137,7 @@ class MemberListSerializer(serializers.ModelSerializer):
 def create_hierarchy_response(node, user=None):
     """
     Factory function to create standardized hierarchy response.
-    
+
     Returns:
     {
         "current": {node details},
@@ -148,7 +148,7 @@ def create_hierarchy_response(node, user=None):
         "user_scope": {user's access level}
     }
     """
-    
+
     response = {
         "current": {
             "id": node.id,
@@ -167,7 +167,7 @@ def create_hierarchy_response(node, user=None):
             "direct_children": 0,
         }
     }
-    
+
     # Parent
     if node.parent:
         response["parent"] = {
@@ -176,7 +176,7 @@ def create_hierarchy_response(node, user=None):
             "name": node.parent.name,
             "depth": node.parent.depth,
         }
-    
+
     # Children
     children = node.get_children()
     response["children"] = [
@@ -191,7 +191,7 @@ def create_hierarchy_response(node, user=None):
         for child in children
     ]
     response["stats"]["direct_children"] = len(response["children"])
-    
+
     # Altars (leaf nodes)
     altars = node.altars.filter(is_active=True)
     response["altars"] = [
@@ -204,7 +204,7 @@ def create_hierarchy_response(node, user=None):
         }
         for altar in altars
     ]
-    
+
     # Breadcrumb
     ancestors = node.get_ancestors()
     response["breadcrumb"] = [
@@ -216,7 +216,7 @@ def create_hierarchy_response(node, user=None):
         }
         for ancestor in ancestors
     ]
-    
+
     # User scope (if authenticated)
     if user and user.is_authenticated:
         response["user_scope"] = {
@@ -224,5 +224,5 @@ def create_hierarchy_response(node, user=None):
             "admin_scope": user.admin_scope.code if user.admin_scope else None,
             "is_superuser": user.is_superuser,
         }
-    
+
     return response

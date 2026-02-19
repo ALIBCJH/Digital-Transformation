@@ -1,5 +1,5 @@
 from rest_framework import permissions
-from core.models import OrganizationNode, Altar
+from core.models import User
 
 
 class HasOrganizationalScope(permissions.BasePermission):

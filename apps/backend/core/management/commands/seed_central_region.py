@@ -191,9 +191,9 @@ class Command(BaseCommand):
 
         self.stdout.write('📋 Summary:')
         self.stdout.write(f'  • 1 Region: {central_region.name}')
-        self.stdout.write(f'  • 6 Sub-Regions: Nyeri, Mweiga, Karatina, Chaka, MUKURWE-INI, Kieni')
-        self.stdout.write(f'  • 7 Altars: Nyeri (2), Others (1 each)')
-        self.stdout.write(f'  • 2 Demo Admins created')
+        self.stdout.write('  • 6 Sub-Regions: Nyeri, Mweiga, Karatina, Chaka, MUKURWE-INI, Kieni')
+        self.stdout.write('  • 7 Altars: Nyeri (2), Others (1 each)')
+        self.stdout.write('  • 2 Demo Admins created')
 
         self.stdout.write('\n🔑 Login Credentials:')
         self.stdout.write('  Central Admin:')
@@ -215,3 +215,4 @@ class Command(BaseCommand):
             self.stdout.write(f'  {altar_example.get_organizational_path()}')
 
         self.stdout.write('\n' + '='*60)
+

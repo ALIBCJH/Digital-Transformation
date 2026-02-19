@@ -1,0 +1,20 @@
+#This files should never be committed to the repo
+*.tfvars
+*.tfvars.json
+
+# Env varibales
+.env
+
+# Terraform state files
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+#LOcal directories
+.terraform/
+
+# Log files
+*.Log
+
+#Crash Logs
+crash.log

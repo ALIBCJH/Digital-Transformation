@@ -158,7 +158,7 @@ if response.status_code == 200:
     nyeri_tokens = response.json()
     nyeri_access_token = nyeri_tokens.get('access')
     nyeri_headers = {"Authorization": f"Bearer {nyeri_access_token}"}
-    
+
     # Test Nyeri admin's altar access (should only see Nyeri altars)
     print_section("TEST 9: Get Altars (as Nyeri Admin - should be scoped)")
     response = requests.get(f"{BASE_URL}/altars/", headers=nyeri_headers)

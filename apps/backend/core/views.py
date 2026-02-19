@@ -4,10 +4,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.utils import timezone
+from django.db.models import Count, Q
 from core.models import User, Member, Altar, OrganizationNode
-from .serializers import (
-    RegisterSerializer, LoginSerializer, UserSerializer, MemberSerializer
-)
+from .serializers import MemberSerializer, RegisterSerializer, LoginSerializer
 from .permissions import (
     HasOrganizationalScope, CanManageMembers
 )
@@ -441,7 +440,7 @@ class AltarDashboardView(APIView):
 
         # Department breakdown
         departments = members.values('serving_department').annotate(
-            count=models.Count('id')
+            count=Count('id')
         ).order_by('-count')
 
         return Response({
