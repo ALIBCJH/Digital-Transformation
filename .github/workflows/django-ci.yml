@@ -3,8 +3,12 @@ name: Django Production CI
 on:
   push:
     branches: [ main, develop, 'feature/**' ]
+    paths:
+      - 'apps/backend/**'  # "Only wake up if my Django code changes!"
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - 'apps/backend/**'
 
 permissions:
   contents: read

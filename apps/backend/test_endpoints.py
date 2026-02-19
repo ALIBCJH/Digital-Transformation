@@ -10,20 +10,23 @@ from datetime import datetime
 
 BASE_URL = "http://localhost:8000/api"
 
+
 def print_section(title):
     """Print a formatted section header"""
     print(f"\n{'='*60}")
     print(f"  {title}")
     print(f"{'='*60}\n")
 
+
 def print_response(response):
     """Pretty print response"""
     print(f"Status Code: {response.status_code}")
     try:
         print(f"Response: {json.dumps(response.json(), indent=2)}")
-    except:
+    except Exception:
         print(f"Response: {response.text}")
     print()
+
 
 # ============================================
 # TEST 1: REGISTER NEW USER

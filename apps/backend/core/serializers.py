@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from rest_framework_simplejwt.tokens import RefreshToken
-from core.models import User, Member, Altar, OrganizationNode
+from core.models import User, Member, Altar
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -47,20 +46,20 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
             raise serializers.ValidationError({"password": "Passwords don't match"})
-        
+
         # Validate required fields
         if not attrs.get('first_name'):
             raise serializers.ValidationError({"first_name": "First name is required"})
         if not attrs.get('last_name'):
             raise serializers.ValidationError({"last_name": "Last name is required"})
-        
+
         return attrs
 
     def create(self, validated_data):
         validated_data.pop('password2')
         email_or_phone = validated_data.pop('email_or_phone')
         altar = validated_data.pop('altar')
-        
+
         # Generate username from first and last name
         username = f"{validated_data['first_name'].lower()}.{validated_data['last_name'].lower()}"
         base_username = username
@@ -123,10 +122,10 @@ class LoginSerializer(serializers.Serializer):
 
         # Authenticate using username
         user = authenticate(username=username, password=password)
-        
+
         if not user:
             raise serializers.ValidationError("Invalid credentials")
-        
+
         if not user.is_active:
             raise serializers.ValidationError("Account is disabled")
 
@@ -196,7 +195,7 @@ class MemberSerializer(serializers.ModelSerializer):
 #     ...
 
 
-# TODO: Re-enable after creating MemberTransferHistory model  
+# TODO: Re-enable after creating MemberTransferHistory model
 # class MemberTransferSerializer(serializers.Serializer):
 #     """Serializer for member transfer/offboarding"""
 #     ...

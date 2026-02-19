@@ -44,7 +44,7 @@ class Command(BaseCommand):
                 'parent': None,  # Root node
             }
         )
-        
+
         if created:
             self.stdout.write(self.style.SUCCESS(f'✓ Created: {central_region.name}'))
         else:
@@ -61,9 +61,9 @@ class Command(BaseCommand):
             ('MUKURWEINI', 'MUKURWE-INI'),
             ('KIENI', 'Kieni'),
         ]
-        
+
         sub_regions = {}
-        
+
         self.stdout.write('\n📍 Creating Sub-Regions:')
         for code, name in sub_regions_data:
             sub_region, created = OrganizationNode.objects.get_or_create(
@@ -74,7 +74,7 @@ class Command(BaseCommand):
                 }
             )
             sub_regions[code] = sub_region
-            
+
             if created:
                 self.stdout.write(self.style.SUCCESS(f'  ✓ {name}'))
             else:
@@ -87,7 +87,7 @@ class Command(BaseCommand):
             # Nyeri has 2 altars
             ('NYERI_MAIN', 'Nyeri Main Altar', 'NYERI', 'Nyeri Town', -0.4197, 36.9489),
             ('NYERI_GATITO', 'Gatito Altar', 'NYERI', 'Gatito', -0.4300, 36.9600),
-            
+
             # Other sub-regions have 1 altar each
             ('MWEIGA_001', 'Mweiga Altar', 'MWEIGA', 'Mweiga', -0.3167, 36.9833),
             ('KARATINA_001', 'Karatina Altar', 'KARATINA', 'Karatina', -0.4833, 37.1333),
@@ -95,7 +95,7 @@ class Command(BaseCommand):
             ('MUKURWEINI_001', 'Mukurwe-ini Altar', 'MUKURWEINI', 'Mukurwe-ini', -0.4667, 37.0167),
             ('KIENI_001', 'Kieni Altar', 'KIENI', 'Kieni', -0.3000, 37.0500),
         ]
-        
+
         self.stdout.write('\n⛪ Creating Altars:')
         for code, name, parent_code, city, lat, lng in altars_data:
             altar, created = Altar.objects.get_or_create(
@@ -109,7 +109,7 @@ class Command(BaseCommand):
                     'is_active': True,
                 }
             )
-            
+
             if created:
                 self.stdout.write(self.style.SUCCESS(f'  ✓ {name} ({city})'))
             else:
@@ -119,26 +119,26 @@ class Command(BaseCommand):
         # 4. UPDATE NODE STATISTICS
         # =============================================
         self.stdout.write('\n📊 Updating statistics...')
-        
+
         for sub_region in sub_regions.values():
             altar_count = sub_region.altars.filter(is_active=True).count()
             sub_region.total_altars = altar_count
             sub_region.save()
-        
+
         # Update Central Region stats
         central_region.total_altars = Altar.objects.filter(
             parent_node__in=sub_regions.values(),
             is_active=True
         ).count()
         central_region.save()
-        
+
         self.stdout.write(self.style.SUCCESS(f'  ✓ Central Region: {central_region.total_altars} altars'))
 
         # =============================================
         # 5. CREATE DEMO ADMIN USERS
         # =============================================
         self.stdout.write('\n👤 Creating demo admin users...')
-        
+
         # Central Region Admin (sees all 6 sub-regions)
         central_admin, created = User.objects.get_or_create(
             username='central_admin',
@@ -160,7 +160,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(
                 f'    Scope: {central_region.name} → Can see all 6 sub-regions'
             ))
-        
+
         # Nyeri Sub-Region Admin (sees only Nyeri + 2 altars)
         nyeri_admin, created = User.objects.get_or_create(
             username='nyeri_admin',
@@ -188,30 +188,30 @@ class Command(BaseCommand):
         # =============================================
         self.stdout.write('\n' + '='*60)
         self.stdout.write(self.style.SUCCESS('✅ CENTRAL REGION DEMO DATA SEEDED SUCCESSFULLY!\n'))
-        
+
         self.stdout.write('📋 Summary:')
         self.stdout.write(f'  • 1 Region: {central_region.name}')
         self.stdout.write(f'  • 6 Sub-Regions: Nyeri, Mweiga, Karatina, Chaka, MUKURWE-INI, Kieni')
         self.stdout.write(f'  • 7 Altars: Nyeri (2), Others (1 each)')
         self.stdout.write(f'  • 2 Demo Admins created')
-        
+
         self.stdout.write('\n🔑 Login Credentials:')
         self.stdout.write('  Central Admin:')
         self.stdout.write('    Email: central@example.com')
         self.stdout.write('    Password: admin123')
         self.stdout.write('    Scope: Full Central Region')
-        
+
         self.stdout.write('\n  Nyeri Admin:')
         self.stdout.write('    Email: nyeri@example.com')
         self.stdout.write('    Password: admin123')
         self.stdout.write('    Scope: Nyeri Sub-Region only')
-        
+
         self.stdout.write('\n🌐 Organizational Path Example:')
         self.stdout.write(f'  {central_region.path}')
         self.stdout.write(f'  {sub_regions["NYERI"].path}')
-        
+
         altar_example = Altar.objects.filter(code='NYERI_MAIN').first()
         if altar_example:
             self.stdout.write(f'  {altar_example.get_organizational_path()}')
-        
+
         self.stdout.write('\n' + '='*60)

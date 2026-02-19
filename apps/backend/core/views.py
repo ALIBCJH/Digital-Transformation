@@ -3,8 +3,6 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.db import transaction, models
-from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from core.models import User, Member, Altar, OrganizationNode
 from .serializers import (
@@ -24,7 +22,7 @@ class RegisterView(generics.CreateAPIView):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+        serializer.save()
 
         return Response({
             "message": "Admin account created successfully. Please login to continue."
@@ -38,14 +36,14 @@ class CreateRegionalAdminView(APIView):
     Only superusers can access this endpoint.
     """
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request):
         # Only superusers can create regional admins
         if not request.user.is_superuser:
             return Response({
                 "error": "Only superadmins can create regional administrators"
             }, status=status.HTTP_403_FORBIDDEN)
-        
+
         # Validate required fields
         required_fields = ['first_name', 'last_name', 'email_or_phone', 'scope_code', 'password']
         for field in required_fields:
@@ -53,13 +51,13 @@ class CreateRegionalAdminView(APIView):
                 return Response({
                     "error": f"Field '{field}' is required"
                 }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         first_name = request.data['first_name']
         last_name = request.data['last_name']
         email_or_phone = request.data['email_or_phone']
         scope_code = request.data['scope_code']
         password = request.data['password']
-        
+
         # Lookup the organizational node
         try:
             scope_node = OrganizationNode.objects.get(code=scope_code, is_active=True)
@@ -67,7 +65,7 @@ class CreateRegionalAdminView(APIView):
             return Response({
                 "error": f"Organization node with code '{scope_code}' does not exist"
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # Generate username
         username = f"{first_name.lower()}.{last_name.lower()}"
         base_username = username
@@ -75,7 +73,7 @@ class CreateRegionalAdminView(APIView):
         while User.objects.filter(username=username).exists():
             username = f"{base_username}{counter}"
             counter += 1
-        
+
         # Determine if email or phone
         user_data = {
             'username': username,
@@ -86,7 +84,7 @@ class CreateRegionalAdminView(APIView):
             'is_staff': True,
             'is_superuser': False
         }
-        
+
         if '@' in email_or_phone:
             if User.objects.filter(email=email_or_phone).exists():
                 return Response({
@@ -101,10 +99,10 @@ class CreateRegionalAdminView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
             user_data['phone_number'] = email_or_phone
             user_data['email'] = ''
-        
+
         # Create the regional admin
         user = User.objects.create_user(**user_data)
-        
+
         return Response({
             "message": f"Regional admin created successfully for {scope_node.name}",
             "admin": {
@@ -125,12 +123,12 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         user = serializer.validated_data['user']
-        
+
         # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
-        
+
         # Determine role and scope
         if user.is_superuser:
             role = "superadmin"
@@ -144,7 +142,7 @@ class LoginView(APIView):
             role = "admin"
             scope = "unassigned"
             scope_name = "No Scope Assigned"
-        
+
         return Response({
             "access": str(refresh.access_token),
             "refresh": str(refresh),
@@ -295,7 +293,7 @@ class RegionalDashboardView(APIView):
 
     def get(self, request):
         user = request.user
-        
+
         # Get the organizational scope (e.g., CENTRAL region)
         if user.is_superuser:
             # Global superadmin sees all regions
@@ -312,32 +310,32 @@ class RegionalDashboardView(APIView):
 
         # Build regional report
         regional_data = []
-        
+
         for region in root_nodes:
             # Get all descendant nodes (sub-regions) under this region
             sub_regions = region.get_descendants(include_self=False).filter(is_active=True)
-            
+
             # Get all altars under this region
             altars_in_region = Altar.objects.filter(
                 parent_node__in=region.get_descendants(include_self=True),
                 is_active=True
             )
-            
+
             # Get all members under this region's altars
             members_in_region = Member.objects.filter(
                 home_altar__in=altars_in_region,
                 is_active=True
             )
-            
+
             # Calculate metrics
             total_altars = altars_in_region.count()
             total_members = members_in_region.count()
             total_sub_regions = sub_regions.count()
-            
+
             # Gender breakdown
             male_count = members_in_region.filter(gender='M').count()
             female_count = members_in_region.filter(gender='F').count()
-            
+
             # Sub-region breakdown
             sub_region_breakdown = []
             for sub_region in sub_regions:
@@ -349,7 +347,7 @@ class RegionalDashboardView(APIView):
                     home_altar__in=altars_in_sub,
                     is_active=True
                 )
-                
+
                 sub_region_breakdown.append({
                     "name": sub_region.name,
                     "code": sub_region.code,
@@ -367,7 +365,7 @@ class RegionalDashboardView(APIView):
                         for altar in altars_in_sub
                     ]
                 })
-            
+
             regional_data.append({
                 "region": {
                     "name": region.name,
@@ -387,7 +385,7 @@ class RegionalDashboardView(APIView):
                 },
                 "sub_regions": sub_region_breakdown
             })
-        
+
         return Response({
             "scope": scope_name,
             "report_date": timezone.now().date(),
@@ -404,10 +402,10 @@ class AltarDashboardView(APIView):
 
     def get(self, request):
         user = request.user
-        
+
         # Get altar from query params or user's scope
         altar_name = request.query_params.get('altar')
-        
+
         if altar_name:
             # Fetch specific altar
             try:
@@ -416,7 +414,7 @@ class AltarDashboardView(APIView):
                 return Response({
                     "error": f"Altar '{altar_name}' not found"
                 }, status=status.HTTP_404_NOT_FOUND)
-            
+
             # Check permission
             if not user.is_superuser and not user.can_manage_altar(altar):
                 return Response({
@@ -429,23 +427,23 @@ class AltarDashboardView(APIView):
                 return Response({
                     "error": "No altars accessible"
                 }, status=status.HTTP_403_FORBIDDEN)
-            
+
             # Default to first accessible altar
             altar = accessible_altars.first()
-        
+
         # Get members for this altar
         members = Member.objects.filter(home_altar=altar, is_active=True)
-        
+
         # Calculate metrics
         total_members = members.count()
         male_count = members.filter(gender='M').count()
         female_count = members.filter(gender='F').count()
-        
+
         # Department breakdown
         departments = members.values('serving_department').annotate(
             count=models.Count('id')
         ).order_by('-count')
-        
+
         return Response({
             "altar": {
                 "name": altar.name,

@@ -11,7 +11,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     # Authentication endpoints
     path('api/register/', RegisterView.as_view(), name='register'),  # Altar-level admin signup
-    path('api/admin/create-regional/', CreateRegionalAdminView.as_view(), name='create_regional_admin'),  # Regional/sub-regional admin (superuser only)
+    # Regional/sub-regional admin (superuser only)
+    path('api/admin/create-regional/', CreateRegionalAdminView.as_view(), name='create_regional_admin'),
     path('api/login/', LoginView.as_view(), name='login'),
     path('api/logout/', LogoutView.as_view(), name='logout'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
