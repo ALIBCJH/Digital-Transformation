@@ -1,94 +1,36 @@
 from django.contrib import admin
-from .models import (
-    OrganizationUnit, User, Member, Guest, AttendanceLog,
-    LeadershipHistory, ServiceSchedule, DataEntryQuota, AltarStatistics,
-    MemberTransferHistory
-)
+from .models import OrganizationNode, Altar, User, Member
 
 
-@admin.register(OrganizationUnit)
-class OrganizationUnitAdmin(admin.ModelAdmin):
-    list_display = ['name', 'level', 'parent', 'current_leader', 'is_active']
-    list_filter = ['level', 'is_active']
-    search_fields = ['name']
+@admin.register(OrganizationNode)
+class OrganizationNodeAdmin(admin.ModelAdmin):
+    list_display = ['name', 'code', 'depth', 'parent', 'current_leader', 'is_active', 'total_altars', 'total_members']
+    list_filter = ['depth', 'is_active']
+    search_fields = ['name', 'code', 'path']
     raw_id_fields = ['parent', 'current_leader']
+    readonly_fields = ['path', 'depth']
+
+
+@admin.register(Altar)
+class AltarAdmin(admin.ModelAdmin):
+    list_display = ['name', 'code', 'parent_node', 'city', 'pastor', 'member_count', 'is_active']
+    list_filter = ['is_active', 'city']
+    search_fields = ['name', 'code', 'city']
+    raw_id_fields = ['parent_node', 'pastor']
 
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
-    list_display = ['username', 'email', 'phone_number', 'home_altar', 'is_active']
-    list_filter = ['is_active', 'phone_verified']
-    search_fields = ['username', 'email', 'phone_number']
-    raw_id_fields = ['home_altar']
+    list_display = ['username', 'email', 'phone_number', 'home_altar', 'admin_scope', 'is_active']
+    list_filter = ['is_active', 'phone_verified', 'is_staff', 'is_superuser']
+    search_fields = ['username', 'email', 'phone_number', 'first_name', 'last_name']
+    raw_id_fields = ['home_altar', 'admin_scope']
 
 
 @admin.register(Member)
 class MemberAdmin(admin.ModelAdmin):
-    list_display = ['full_name', 'phone_number', 'gender', 'serving_department', 'home_altar']
-    list_filter = ['gender', 'home_altar']
-    search_fields = ['full_name', 'phone_number', 'serving_department']
+    list_display = ['full_name', 'phone_number', 'gender', 'home_altar', 'is_active']
+    list_filter = ['gender', 'is_active']
+    search_fields = ['full_name', 'phone_number', 'email']
     raw_id_fields = ['home_altar']
-
-
-@admin.register(Guest)
-class GuestAdmin(admin.ModelAdmin):
-    list_display = ['full_name', 'phone_number', 'visiting_from', 'visit_count', 'first_visit_date']
-    search_fields = ['full_name', 'phone_number']
-
-
-@admin.register(AttendanceLog)
-class AttendanceLogAdmin(admin.ModelAdmin):
-    list_display = ['get_person', 'altar', 'service_date', 'service_type', 'recorded_by']
-    list_filter = ['service_date', 'service_type', 'country', 'region']
-    search_fields = ['member__full_name', 'guest__full_name']
-    raw_id_fields = ['member', 'guest', 'altar', 'sub_region', 'region', 'country', 'continent', 'recorded_by']
-    date_hierarchy = 'service_date'
-
-    def get_person(self, obj):
-        return obj.member.full_name if obj.member else obj.guest.full_name
-    get_person.short_description = 'Person'
-
-
-@admin.register(LeadershipHistory)
-class LeadershipHistoryAdmin(admin.ModelAdmin):
-    list_display = ['leader', 'organization_unit', 'leadership_title', 'start_date', 'end_date']
-    list_filter = ['leadership_title', 'end_date']
-    search_fields = ['leader__username', 'organization_unit__name']
-    raw_id_fields = ['organization_unit', 'leader', 'transferred_to', 'created_by']
-    date_hierarchy = 'start_date'
-
-
-@admin.register(ServiceSchedule)
-class ServiceScheduleAdmin(admin.ModelAdmin):
-    list_display = ['organization_unit', 'day_of_week', 'service_type', 'start_time', 'end_time', 'is_active']
-    list_filter = ['day_of_week', 'service_type', 'is_active']
-    search_fields = ['organization_unit__name']
-    raw_id_fields = ['organization_unit']
-
-
-@admin.register(DataEntryQuota)
-class DataEntryQuotaAdmin(admin.ModelAdmin):
-    list_display = ['user', 'date', 'attendance_records_created', 'guests_registered']
-    list_filter = ['date']
-    search_fields = ['user__username']
-    raw_id_fields = ['user']
-    date_hierarchy = 'date'
-
-
-@admin.register(AltarStatistics)
-class AltarStatisticsAdmin(admin.ModelAdmin):
-    list_display = ['altar', 'date', 'total_attendance', 'member_attendance', 'guest_count', 'is_anomaly']
-    list_filter = ['date', 'is_anomaly', 'reviewed_by_admin']
-    search_fields = ['altar__name']
-    raw_id_fields = ['altar']
-    date_hierarchy = 'date'
-
-
-@admin.register(MemberTransferHistory)
-class MemberTransferHistoryAdmin(admin.ModelAdmin):
-    list_display = ['member', 'from_altar', 'to_altar', 'transfer_reason', 'transfer_date', 'processed_by']
-    list_filter = ['transfer_reason', 'transfer_date']
-    search_fields = ['member__full_name', 'from_altar__name', 'to_altar__name']
-    raw_id_fields = ['member', 'from_altar', 'to_altar', 'processed_by']
-    date_hierarchy = 'transfer_date'
     readonly_fields = ['created_at']

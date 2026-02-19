@@ -1,0 +1,297 @@
+{
+  "info": {
+    "name": "Church Management API",
+    "description": "Backend API endpoints for the redesigned church management system with recursive organizational hierarchy",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register New User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email_or_phone\": \"johndoe@example.com\",\n  \"altar\": \"Nyeri Main Altar\",\n  \"password\": \"SecurePass123!\",\n  \"password2\": \"SecurePass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/register/",
+              "host": ["{{base_url}}"],
+              "path": ["register", ""]
+            },
+            "description": "Register a new user account. Requires first name, last name, email or phone, altar name, and password."
+          }
+        },
+        {
+          "name": "Login with Email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response.access) {",
+                  "  pm.collectionVariables.set('access_token', response.access);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email_or_phone\": \"johndoe@example.com\",\n  \"password\": \"SecurePass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/login/",
+              "host": ["{{base_url}}"],
+              "path": ["login", ""]
+            },
+            "description": "Login with email or phone number and password. Returns access token, refresh token, and user info."
+          }
+        },
+        {
+          "name": "Login as Central Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response.access) {",
+                  "  pm.collectionVariables.set('access_token', response.access);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email_or_phone\": \"central@example.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/login/",
+              "host": ["{{base_url}}"],
+              "path": ["login", ""]
+            },
+            "description": "Login as Central Region admin (sees all altars in Central region)"
+          }
+        },
+        {
+          "name": "Login as Nyeri Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response.access) {",
+                  "  pm.collectionVariables.set('access_token', response.access);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email_or_phone\": \"nyeri@example.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/login/",
+              "host": ["{{base_url}}"],
+              "path": ["login", ""]
+            },
+            "description": "Login as Nyeri Sub-Region admin (only sees Nyeri altars)"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"YOUR_REFRESH_TOKEN_HERE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/token/refresh/",
+              "host": ["{{base_url}}"],
+              "path": ["token", "refresh", ""]
+            },
+            "description": "Refresh access token using refresh token"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"YOUR_REFRESH_TOKEN_HERE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/logout/",
+              "host": ["{{base_url}}"],
+              "path": ["logout", ""]
+            },
+            "description": "Logout and blacklist the refresh token"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Altars",
+      "item": [
+        {
+          "name": "Get Altar List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/altars/",
+              "host": ["{{base_url}}"],
+              "path": ["altars", ""]
+            },
+            "description": "Get list of altars accessible to the authenticated user (filtered by admin_scope)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Members",
+      "item": [
+        {
+          "name": "Create Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Jane Smith\",\n  \"phone_number\": \"+254712345678\",\n  \"gender\": \"F\",\n  \"serving_department\": \"Worship Team\",\n  \"membership_date\": \"2026-02-18\",\n  \"date_of_birth\": \"1990-05-15\",\n  \"home_altar\": \"Nyeri Main Altar\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/members/create/",
+              "host": ["{{base_url}}"],
+              "path": ["members", "create", ""]
+            },
+            "description": "Create a new church member. Admin must have permission to manage the specified altar."
+          }
+        },
+        {
+          "name": "Get Member List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/members/list/",
+              "host": ["{{base_url}}"],
+              "path": ["members", "list", ""]
+            },
+            "description": "Get list of members accessible to the authenticated user (filtered by admin_scope)"
+          }
+        },
+        {
+          "name": "Get Members by Altar",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/members/list/?altar=Nyeri Main Altar",
+              "host": ["{{base_url}}"],
+              "path": ["members", "list", ""],
+              "query": [
+                {
+                  "key": "altar",
+                  "value": "Nyeri Main Altar"
+                }
+              ]
+            },
+            "description": "Filter members by altar name"
+          }
+        }
+      ]
+    }
+  ]
+}
