@@ -63,7 +63,20 @@ class CanManageMembers(permissions.BasePermission):
 #     ...
 
 
-# TODO: Re-enable after creating MemberTransferHistory model
-# class CanTransferMembers(permissions.BasePermission):
-#     """Permission to check if admin can transfer members."""
-#     ...
+class CanTransferMembers(permissions.BasePermission):
+    """
+    Permission to check if admin can transfer members.
+    Admin must have permission for both source and destination altars.
+    """
+    message = "You can only transfer members within your organizational scope."
+
+    def has_permission(self, request, view):
+        # Superusers can do anything
+        if request.user.is_superuser:
+            return True
+
+        # User must have organizational scope
+        if not request.user.admin_scope:
+            return False
+
+        return True

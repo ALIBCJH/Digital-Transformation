@@ -11,6 +11,7 @@ This redesign implements:
 """
 
 from django.db import models
+from django.db.models import Q
 from django.contrib.auth.models import AbstractUser
 from django.contrib.postgres.indexes import GinIndex
 
@@ -377,3 +378,244 @@ class Member(models.Model):
 
     def __str__(self):
         return self.full_name
+
+
+class MemberTransferHistory(models.Model):
+    """
+    Track member transfers between altars and offboarding.
+    Records both internal transfers and departures.
+    """
+
+    TRANSFER_REASONS = [
+        ('job_transfer', 'Job Transfer'),
+        ('relocation', 'Relocation'),
+        ('family_reasons', 'Family Reasons'),
+        ('personal_choice', 'Personal Choice'),
+        ('offboarding', 'Offboarding/Leaving'),
+        ('other', 'Other'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+
+    # Member being transferred
+    member = models.ForeignKey(
+        Member,
+        on_delete=models.CASCADE,
+        related_name='transfer_history',
+        db_index=True
+    )
+
+    # Transfer details
+    from_altar = models.ForeignKey(
+        Altar,
+        on_delete=models.PROTECT,
+        related_name='transfers_out',
+        db_index=True
+    )
+
+    to_altar = models.ForeignKey(
+        Altar,
+        on_delete=models.PROTECT,
+        related_name='transfers_in',
+        null=True,
+        blank=True,
+        help_text='Null if member is being offboarded/deactivated'
+    )
+
+    # Reason and notes (matching existing DB schema)
+    transfer_reason = models.CharField(
+        max_length=50,
+        choices=TRANSFER_REASONS,
+        default='other',
+        db_column='transfer_reason'
+    )
+    transfer_date = models.DateField(auto_now_add=True)
+    notes = models.TextField(blank=True)
+
+    # Audit trail (matching existing DB schema)
+    processed_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='transfers_processed',
+        db_column='processed_by_id',
+        null=True,
+        blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'member_transfer_history'
+        indexes = [
+            models.Index(fields=['member', 'created_at']),
+            models.Index(fields=['from_altar', 'created_at']),
+            models.Index(fields=['to_altar', 'created_at']),
+        ]
+        ordering = ['-created_at']
+        verbose_name_plural = 'Member transfer histories'
+
+    def __str__(self):
+        if self.to_altar:
+            return f"{self.member.full_name}: {self.from_altar.name} → {self.to_altar.name}"
+        return f"{self.member.full_name}: Offboarded from {self.from_altar.name}"
+
+
+class Guest(models.Model):
+    """
+    Visitor/guest tracking for altar visits.
+    Tracks first-time visitors and repeat guests.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    full_name = models.CharField(max_length=255, db_index=True)
+    phone_number = models.CharField(max_length=20, blank=True)
+    gender = models.CharField(max_length=10, blank=True)
+
+    # Which altar they visited (if exists in DB, otherwise NULL for old data)
+    visited_altar = models.ForeignKey(
+        Altar,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='guests',
+        db_column='visited_altar_id'
+    )
+
+    # Where they're from
+    visiting_from = models.CharField(max_length=255, blank=True)
+
+    # Visit tracking
+    first_visit_date = models.DateField()
+    last_visit_date = models.DateField()
+    visit_count = models.IntegerField(default=1)
+
+    # Notes
+    notes = models.TextField(blank=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'guests'
+        indexes = [
+            models.Index(fields=['visited_altar', 'last_visit_date']),
+            models.Index(fields=['full_name']),
+        ]
+        ordering = ['-last_visit_date']
+
+    def __str__(self):
+        return f"{self.full_name} ({self.visit_count} visits)"
+
+
+class AttendanceLog(models.Model):
+    """
+    Track member and guest attendance at services.
+    Records who attended which service at which altar.
+    """
+
+    SERVICE_TYPES = [
+        ('sunday_service', 'Sunday Service'),
+        ('midweek_service', 'Midweek Service'),
+        ('special_service', 'Special Service'),
+        ('prayer_meeting', 'Prayer Meeting'),
+        ('other', 'Other'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+
+    # Service details
+    service_date = models.DateField(db_index=True)
+    service_type = models.CharField(
+        max_length=50,
+        choices=SERVICE_TYPES,
+        default='sunday_service'
+    )
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    # Who attended (either member or guest)
+    member = models.ForeignKey(
+        Member,
+        on_delete=models.CASCADE,
+        related_name='attendance_logs',
+        null=True,
+        blank=True,
+        db_column='member_id'
+    )
+    guest = models.ForeignKey(
+        Guest,
+        on_delete=models.CASCADE,
+        related_name='attendance_logs',
+        null=True,
+        blank=True,
+        db_column='guest_id'
+    )
+
+    # Location (organizational hierarchy)
+    altar = models.ForeignKey(
+        Altar,
+        on_delete=models.PROTECT,
+        related_name='attendance_logs',
+        db_column='altar_id'
+    )
+    sub_region = models.ForeignKey(
+        OrganizationNode,
+        on_delete=models.PROTECT,
+        related_name='sub_region_attendance',
+        null=True,
+        blank=True,
+        db_column='sub_region_id'
+    )
+    region = models.ForeignKey(
+        OrganizationNode,
+        on_delete=models.PROTECT,
+        related_name='region_attendance',
+        null=True,
+        blank=True,
+        db_column='region_id'
+    )
+    country = models.ForeignKey(
+        OrganizationNode,
+        on_delete=models.PROTECT,
+        related_name='country_attendance',
+        null=True,
+        blank=True,
+        db_column='country_id'
+    )
+    continent = models.ForeignKey(
+        OrganizationNode,
+        on_delete=models.PROTECT,
+        related_name='continent_attendance',
+        null=True,
+        blank=True,
+        db_column='continent_id'
+    )
+
+    # Who recorded this attendance
+    recorded_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='attendance_recorded',
+        db_column='recorded_by_id'
+    )
+
+    class Meta:
+        db_table = 'attendance_logs'
+        indexes = [
+            models.Index(fields=['service_date', 'altar']),
+            models.Index(fields=['member', 'service_date']),
+            models.Index(fields=['guest', 'service_date']),
+        ]
+        ordering = ['-service_date', '-timestamp']
+        constraints = [
+            models.CheckConstraint(
+                check=Q(member__isnull=False) | Q(guest__isnull=False),
+                name='attendance_must_have_member_or_guest'
+            )
+        ]
+
+    def __str__(self):
+        if self.member:
+            return f"{self.member.full_name} - {self.service_date}"
+        elif self.guest:
+            return f"{self.guest.full_name} (Guest) - {self.service_date}"
+        return f"Attendance #{self.id} - {self.service_date}"
