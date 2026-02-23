@@ -21,20 +21,6 @@ jobs:
   # 1. QUALITY CONTROL JOB
   test-and-lint:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_DB: test_db
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports: [5432:5432]
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -63,23 +49,14 @@ jobs:
           safety check
           bandit -r . -ll
 
-      - name: Setup PostgreSQL Extensions
-        run: |
-          # Install pg_trgm extension for trigram indexing
-          PGPASSWORD=postgres psql -h localhost -U postgres -d test_db -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
-
       - name: Run Django Tests
         working-directory: ./apps/backend
         env:
           SECRET_KEY: "temporary-key-for-testing"
-          DB_ENGINE: "django.db.backends.postgresql"
-          DB_NAME: "test_db"
-          DB_USER: "postgres"
-          DB_PASSWORD: "postgres"
-          DB_HOST: "localhost"
-          DB_PORT: "5432"
+          DJANGO_SETTINGS_MODULE: "config.ci_settings"
         run: |
-          python manage.py makemigrations --check --dry-run
+          # Create tables without migrations to avoid PostgreSQL-specific indexes
+          python manage.py migrate --run-syncdb
           python manage.py test
 
   # 2. PACKAGING JOB (Artifact Verification)
