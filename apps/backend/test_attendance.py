@@ -14,7 +14,8 @@ def main():
     login_response = requests.post(
         f"{BASE_URL}/api/login/",
         json={"username": "admin", "password": "admin12345"},
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json"},
+        timeout=10
     )
 
     if login_response.status_code != 200:
@@ -35,7 +36,8 @@ def main():
     members_response = requests.get(
         f"{BASE_URL}/api/attendance/members/",
         headers=headers,
-        params={"altar_id": 1}
+        params={"altar_id": 1},
+        timeout=10
     )
 
     if members_response.status_code != 200:
@@ -68,7 +70,8 @@ def main():
     attendance_response = requests.post(
         f"{BASE_URL}/api/attendance/record/",
         headers=headers,
-        json=attendance_data
+        json=attendance_data,
+        timeout=10
     )
 
     if attendance_response.status_code == 201:
