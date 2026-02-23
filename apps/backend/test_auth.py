@@ -3,7 +3,8 @@ Test script for the new simplified authentication endpoints
 Run with: python test_auth.py
 """
 
-print("""
+print(
+    """
 ==============================================
 SIMPLIFIED AUTHENTICATION TEST GUIDE
 ==============================================
@@ -122,4 +123,5 @@ VALIDATION NOTES:
 - Username is auto-generated from first and last name (e.g., "john.kamau")
 
 ==============================================
-""")
+"""
+)

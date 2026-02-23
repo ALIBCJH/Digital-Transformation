@@ -20,6 +20,7 @@ from django.db import models
 # CORE HIERARCHICAL ORGANIZATION
 # ============================================
 
+
 class OrganizationNode(models.Model):
     """
     Recursive tree structure for organization hierarchy.
@@ -40,17 +41,17 @@ class OrganizationNode(models.Model):
         max_length=50,
         unique=True,
         db_index=True,
-        help_text="Unique identifier (e.g., CENTRAL, NYERI, ALTAR_001)"
+        help_text="Unique identifier (e.g., CENTRAL, NYERI, ALTAR_001)",
     )
 
     # Self-referential parent relationship
     parent = models.ForeignKey(
-        'self',
+        "self",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name='children',
-        db_index=True
+        related_name="children",
+        db_index=True,
     )
 
     # Materialized Path for O(1) ancestor queries
@@ -58,7 +59,7 @@ class OrganizationNode(models.Model):
         max_length=1000,
         unique=True,
         db_index=True,
-        help_text="Materialized path (e.g., /GLOBAL/AFRICA/KENYA/CENTRAL/)"
+        help_text="Materialized path (e.g., /GLOBAL/AFRICA/KENYA/CENTRAL/)",
     )
 
     # Tree metadata
@@ -66,11 +67,11 @@ class OrganizationNode(models.Model):
 
     # Leadership
     current_leader = models.ForeignKey(
-        'User',
+        "User",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='leading_nodes'
+        related_name="leading_nodes",
     )
 
     # Metadata
@@ -83,21 +84,20 @@ class OrganizationNode(models.Model):
     total_members = models.IntegerField(default=0)
 
     class Meta:
-        db_table = 'organization_nodes'
+        db_table = "organization_nodes"
         indexes = [
-            models.Index(fields=['parent', 'is_active']),
-            models.Index(fields=['depth', 'is_active']),
-            models.Index(fields=['path']),  # Critical for ancestor queries
+            models.Index(fields=["parent", "is_active"]),
+            models.Index(fields=["depth", "is_active"]),
+            models.Index(fields=["path"]),  # Critical for ancestor queries
             # GIN index for path prefix matching (Postgres-specific)
-            GinIndex(fields=['path'], name='path_gin_idx', opclasses=['gin_trgm_ops']),
+            GinIndex(fields=["path"], name="path_gin_idx", opclasses=["gin_trgm_ops"]),
         ]
         constraints = [
             models.CheckConstraint(
-                check=models.Q(depth__gte=0),
-                name='depth_non_negative'
+                check=models.Q(depth__gte=0), name="depth_non_negative"
             )
         ]
-        ordering = ['path']
+        ordering = ["path"]
 
     def __str__(self):
         return f"{self.name} (Depth {self.depth})"
@@ -121,41 +121,41 @@ class OrganizationNode(models.Model):
 
         # Extract parent paths from materialized path
         # /GLOBAL/AFRICA/KENYA/ → [/GLOBAL/, /GLOBAL/AFRICA/]
-        path_parts = self.path.strip('/').split('/')
+        path_parts = self.path.strip("/").split("/")
         ancestor_paths = [
-            '/' + '/'.join(path_parts[:i+1]) + '/'
+            "/" + "/".join(path_parts[: i + 1]) + "/"
             for i in range(len(path_parts) - 1)
         ]
 
-        return OrganizationNode.objects.filter(
-            path__in=ancestor_paths
-        ).order_by('depth')
+        return OrganizationNode.objects.filter(path__in=ancestor_paths).order_by(
+            "depth"
+        )
 
     def get_descendants(self, include_self=False):
         """O(1) query for all descendants using path prefix"""
         queryset = OrganizationNode.objects.filter(
-            path__startswith=self.path,
-            is_active=True
+            path__startswith=self.path, is_active=True
         )
 
         if not include_self:
             queryset = queryset.exclude(id=self.id)
 
-        return queryset.order_by('depth', 'name')
+        return queryset.order_by("depth", "name")
 
     def get_children(self):
         """Direct children only (one level down)"""
-        return self.children.filter(is_active=True).order_by('name')
+        return self.children.filter(is_active=True).order_by("name")
 
     def get_siblings(self):
         """Nodes at the same level with same parent"""
         if not self.parent:
             return OrganizationNode.objects.none()
 
-        return OrganizationNode.objects.filter(
-            parent=self.parent,
-            is_active=True
-        ).exclude(id=self.id).order_by('name')
+        return (
+            OrganizationNode.objects.filter(parent=self.parent, is_active=True)
+            .exclude(id=self.id)
+            .order_by("name")
+        )
 
     def get_root(self):
         """O(1) query for root node"""
@@ -163,7 +163,7 @@ class OrganizationNode(models.Model):
             return self
 
         # First part of path is always root
-        root_code = self.path.strip('/').split('/')[0]
+        root_code = self.path.strip("/").split("/")[0]
         return OrganizationNode.objects.get(code=root_code)
 
     def is_ancestor_of(self, node):
@@ -187,10 +187,7 @@ class Altar(models.Model):
 
     # Link to parent node (typically a Sub-Region)
     parent_node = models.ForeignKey(
-        OrganizationNode,
-        on_delete=models.CASCADE,
-        related_name='altars',
-        db_index=True
+        OrganizationNode, on_delete=models.CASCADE, related_name="altars", db_index=True
     )
 
     # Location details
@@ -205,11 +202,11 @@ class Altar(models.Model):
 
     # Leadership
     pastor = models.ForeignKey(
-        'User',
+        "User",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='pastoring_altars'
+        related_name="pastoring_altars",
     )
 
     # Metadata
@@ -223,13 +220,13 @@ class Altar(models.Model):
     capacity = models.IntegerField(null=True, blank=True)
 
     class Meta:
-        db_table = 'altars'
+        db_table = "altars"
         indexes = [
-            models.Index(fields=['parent_node', 'is_active']),
-            models.Index(fields=['code']),
-            models.Index(fields=['city']),
+            models.Index(fields=["parent_node", "is_active"]),
+            models.Index(fields=["code"]),
+            models.Index(fields=["city"]),
         ]
-        ordering = ['name']
+        ordering = ["name"]
 
     def __str__(self):
         return f"{self.name} ({self.parent_node.name})"
@@ -243,6 +240,7 @@ class Altar(models.Model):
 # USER MODEL WITH MULTI-TENANT SCOPE
 # ============================================
 
+
 class User(AbstractUser):
     """
     Extended user with organizational scope for multi-tenant filtering.
@@ -254,22 +252,22 @@ class User(AbstractUser):
     home_altar = models.ForeignKey(
         Altar,
         on_delete=models.PROTECT,
-        related_name='home_members',
+        related_name="home_members",
         null=True,
-        blank=True
+        blank=True,
     )
 
     # Administrative scope (for multi-tenant filtering)
     admin_scope = models.ForeignKey(
         OrganizationNode,
         on_delete=models.PROTECT,
-        related_name='admins',
+        related_name="admins",
         null=True,
         blank=True,
         help_text=(
-            'The organizational node this user can manage '
-            '(e.g., Central Region, Nyeri Sub-Region)'
-        )
+            "The organizational node this user can manage "
+            "(e.g., Central Region, Nyeri Sub-Region)"
+        ),
     )
 
     # Metadata
@@ -279,23 +277,23 @@ class User(AbstractUser):
 
     # Django auth overrides
     groups = models.ManyToManyField(
-        'auth.Group',
-        verbose_name='groups',
+        "auth.Group",
+        verbose_name="groups",
         blank=True,
-        related_name='core_users',
+        related_name="core_users",
     )
     user_permissions = models.ManyToManyField(
-        'auth.Permission',
-        verbose_name='user permissions',
+        "auth.Permission",
+        verbose_name="user permissions",
         blank=True,
-        related_name='core_users',
+        related_name="core_users",
     )
 
     class Meta:
-        db_table = 'users'
+        db_table = "users"
         indexes = [
-            models.Index(fields=['admin_scope', 'is_active']),
-            models.Index(fields=['home_altar']),
+            models.Index(fields=["admin_scope", "is_active"]),
+            models.Index(fields=["home_altar"]),
         ]
 
     def get_accessible_nodes(self):
@@ -324,10 +322,7 @@ class User(AbstractUser):
 
         # Get all altars under accessible nodes
         accessible_nodes = self.get_accessible_nodes()
-        return Altar.objects.filter(
-            parent_node__in=accessible_nodes,
-            is_active=True
-        )
+        return Altar.objects.filter(parent_node__in=accessible_nodes, is_active=True)
 
     def can_manage_node(self, node):
         """Check if user can manage a specific node"""
@@ -349,8 +344,10 @@ class User(AbstractUser):
 # HELPER MODELS
 # ============================================
 
+
 class Member(models.Model):
     """Church member profile"""
+
     id = models.BigAutoField(primary_key=True)
     full_name = models.CharField(max_length=255, db_index=True)
     phone_number = models.CharField(max_length=20, blank=True)
@@ -358,10 +355,7 @@ class Member(models.Model):
 
     # Link to altar
     home_altar = models.ForeignKey(
-        Altar,
-        on_delete=models.PROTECT,
-        related_name='members',
-        db_index=True
+        Altar, on_delete=models.PROTECT, related_name="members", db_index=True
     )
 
     # Demographics
@@ -377,10 +371,10 @@ class Member(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'members'
+        db_table = "members"
         indexes = [
-            models.Index(fields=['home_altar', 'is_active']),
-            models.Index(fields=['full_name']),
+            models.Index(fields=["home_altar", "is_active"]),
+            models.Index(fields=["full_name"]),
         ]
 
     def __str__(self):

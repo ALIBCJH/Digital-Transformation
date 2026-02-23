@@ -19,23 +19,26 @@ from .models_redesign import Altar, Member, OrganizationNode
 
 class NodeBreadcrumbSerializer(serializers.ModelSerializer):
     """Minimal node info for breadcrumb trails"""
+
     class Meta:
         model = OrganizationNode
-        fields = ['id', 'code', 'name', 'depth']
+        fields = ["id", "code", "name", "depth"]
 
 
 class NodeMinimalSerializer(serializers.ModelSerializer):
     """Lightweight node representation for parent/children"""
+
     class Meta:
         model = OrganizationNode
-        fields = ['id', 'code', 'name', 'depth', 'total_altars', 'total_members']
+        fields = ["id", "code", "name", "depth", "total_altars", "total_members"]
 
 
 class AltarMinimalSerializer(serializers.ModelSerializer):
     """Lightweight altar representation"""
+
     class Meta:
         model = Altar
-        fields = ['id', 'code', 'name', 'member_count', 'city']
+        fields = ["id", "code", "name", "member_count", "city"]
 
 
 class NodeDetailSerializer(serializers.ModelSerializer):
@@ -58,10 +61,18 @@ class NodeDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrganizationNode
         fields = [
-            'id', 'code', 'name', 'depth', 'path',
-            'parent', 'children', 'altars',
-            'breadcrumb', 'stats',
-            'is_active', 'created_at'
+            "id",
+            "code",
+            "name",
+            "depth",
+            "path",
+            "parent",
+            "children",
+            "altars",
+            "breadcrumb",
+            "stats",
+            "is_active",
+            "created_at",
         ]
 
     def get_children(self, obj):
@@ -77,10 +88,10 @@ class NodeDetailSerializer(serializers.ModelSerializer):
     def get_stats(self, obj):
         """Aggregate statistics for this node"""
         return {
-            'total_altars': obj.total_altars,
-            'total_members': obj.total_members,
-            'direct_children': obj.children.filter(is_active=True).count(),
-            'depth': obj.depth
+            "total_altars": obj.total_altars,
+            "total_members": obj.total_members,
+            "direct_children": obj.children.filter(is_active=True).count(),
+            "depth": obj.depth,
         }
 
 
@@ -94,10 +105,18 @@ class AltarDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Altar
         fields = [
-            'id', 'code', 'name', 'address', 'city',
-            'latitude', 'longitude',
-            'parent_node', 'breadcrumb', 'stats',
-            'established_date', 'is_active'
+            "id",
+            "code",
+            "name",
+            "address",
+            "city",
+            "latitude",
+            "longitude",
+            "parent_node",
+            "breadcrumb",
+            "stats",
+            "established_date",
+            "is_active",
         ]
 
     def get_breadcrumb(self, obj):
@@ -111,29 +130,39 @@ class AltarDetailSerializer(serializers.ModelSerializer):
     def get_stats(self, obj):
         """Altar statistics"""
         return {
-            'member_count': obj.member_count,
-            'capacity': obj.capacity,
-            'attendance_rate': round((obj.member_count / obj.capacity * 100), 1) if obj.capacity else None
+            "member_count": obj.member_count,
+            "capacity": obj.capacity,
+            "attendance_rate": round((obj.member_count / obj.capacity * 100), 1)
+            if obj.capacity
+            else None,
         }
 
 
 class MemberListSerializer(serializers.ModelSerializer):
     """Member list with altar context"""
-    altar_name = serializers.CharField(source='home_altar.name', read_only=True)
-    altar_code = serializers.CharField(source='home_altar.code', read_only=True)
+
+    altar_name = serializers.CharField(source="home_altar.name", read_only=True)
+    altar_code = serializers.CharField(source="home_altar.code", read_only=True)
 
     class Meta:
         model = Member
         fields = [
-            'id', 'full_name', 'phone_number', 'email',
-            'gender', 'membership_date',
-            'altar_name', 'altar_code', 'is_active'
+            "id",
+            "full_name",
+            "phone_number",
+            "email",
+            "gender",
+            "membership_date",
+            "altar_name",
+            "altar_code",
+            "is_active",
         ]
 
 
 # ============================================
 # STANDARDIZED API RESPONSE WRAPPER
 # ============================================
+
 
 def create_hierarchy_response(node, user=None):
     """
@@ -166,7 +195,7 @@ def create_hierarchy_response(node, user=None):
             "total_altars": node.total_altars,
             "total_members": node.total_members,
             "direct_children": 0,
-        }
+        },
     }
 
     # Parent

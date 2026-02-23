@@ -6,6 +6,7 @@ class HasOrganizationalScope(permissions.BasePermission):
     Permission to check if admin has organizational scope assigned.
     Superusers bypass this check.
     """
+
     message = (
         "You must be assigned to an organizational unit "
         "(region, sub-region, or altar) to perform this action."
@@ -17,10 +18,7 @@ class HasOrganizationalScope(permissions.BasePermission):
             return True
 
         # User must be authenticated and have admin_scope assigned
-        return (
-            request.user.is_authenticated and
-            request.user.admin_scope is not None
-        )
+        return request.user.is_authenticated and request.user.admin_scope is not None
 
 
 class CanManageMembers(permissions.BasePermission):
@@ -29,6 +27,7 @@ class CanManageMembers(permissions.BasePermission):
     Admins can only manage members within their assigned organizational unit
     and its descendants.
     """
+
     message = "You can only manage members within your organizational scope."
 
     def has_permission(self, request, view):
@@ -48,7 +47,7 @@ class CanManageMembers(permissions.BasePermission):
             return True
 
         # Check if the member's altar is within admin's scope
-        if hasattr(obj, 'home_altar') and obj.home_altar:
+        if hasattr(obj, "home_altar") and obj.home_altar:
             return request.user.can_manage_altar(obj.home_altar)
 
         return False
@@ -74,6 +73,7 @@ class CanTransferMembers(permissions.BasePermission):
     Permission to check if admin can transfer members.
     Admin must have permission for both source and destination altars.
     """
+
     message = "You can only transfer members within your organizational scope."
 
     def has_permission(self, request, view):

@@ -8,6 +8,7 @@ import requests
 
 BASE_URL = "http://localhost:8000"
 
+
 def main():
     # Step 1: Login to get access token
     print("1. Logging in...")
@@ -15,7 +16,7 @@ def main():
         f"{BASE_URL}/api/login/",
         json={"username": "admin", "password": "admin12345"},
         headers={"Content-Type": "application/json"},
-        timeout=10
+        timeout=10,
     )
 
     if login_response.status_code != 200:
@@ -28,7 +29,7 @@ def main():
 
     headers = {
         "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
     # Step 2: Get members for attendance
@@ -37,7 +38,7 @@ def main():
         f"{BASE_URL}/api/attendance/members/",
         headers=headers,
         params={"altar_id": 1},
-        timeout=10
+        timeout=10,
     )
 
     if members_response.status_code != 200:
@@ -51,7 +52,7 @@ def main():
 
     # Step 3: Record attendance (mark first 2 members as present)
     print("\n3. Recording attendance...")
-    present_member_ids = [m['id'] for m in members_data['members'][:2]]
+    present_member_ids = [m["id"] for m in members_data["members"][:2]]
 
     attendance_data = {
         "altar_id": 1,
@@ -60,7 +61,7 @@ def main():
         "attendance_records": [
             {"member_id": member_id, "is_present": True}
             for member_id in present_member_ids
-        ]
+        ],
     }
 
     print(f"   Marking {len(present_member_ids)} members as present")
@@ -71,7 +72,7 @@ def main():
         f"{BASE_URL}/api/attendance/record/",
         headers=headers,
         json=attendance_data,
-        timeout=10
+        timeout=10,
     )
 
     if attendance_response.status_code == 201:
@@ -85,6 +86,7 @@ def main():
         return
 
     print("\n🎉 All tests passed!")
+
 
 if __name__ == "__main__":
     main()

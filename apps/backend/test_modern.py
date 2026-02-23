@@ -20,9 +20,7 @@ class TestAuthentication:
 
         # Create test organization node
         self.org_node = OrganizationNode.objects.create(
-            name="Test Region",
-            code="TEST",
-            is_active=True
+            name="Test Region", code="TEST", is_active=True
         )
 
         # Create test altar
@@ -30,40 +28,40 @@ class TestAuthentication:
             name="Test Altar",
             code="TEST_ALTAR",
             parent_node=self.org_node,
-            is_active=True
+            is_active=True,
         )
 
     def test_register_success(self):
         """Test successful user registration"""
-        url = reverse('register')
+        url = reverse("register")
         data = {
             "first_name": "John",
             "last_name": "Doe",
             "email_or_phone": "john.doe@test.com",
             "altar": "Test Altar",
             "password": "TestPass123!",
-            "password2": "TestPass123!"
+            "password2": "TestPass123!",
         }
 
-        response = self.client.post(url, data, format='json')
+        response = self.client.post(url, data, format="json")
         assert response.status_code == status.HTTP_201_CREATED
-        assert 'access' in response.data
-        assert 'user' in response.data
-        assert response.data['user']['first_name'] == "John"
+        assert "access" in response.data
+        assert "user" in response.data
+        assert response.data["user"]["first_name"] == "John"
 
     def test_register_password_mismatch(self):
         """Test registration with mismatched passwords"""
-        url = reverse('register')
+        url = reverse("register")
         data = {
             "first_name": "John",
             "last_name": "Doe",
             "email_or_phone": "john.doe@test.com",
             "altar": "Test Altar",
             "password": "TestPass123!",
-            "password2": "DifferentPass123!"
+            "password2": "DifferentPass123!",
         }
 
-        response = self.client.post(url, data, format='json')
+        response = self.client.post(url, data, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_login_success(self):
@@ -74,29 +72,26 @@ class TestAuthentication:
             email="test@example.com",
             first_name="Test",
             last_name="User",
-            password="TestPass123!"
+            password="TestPass123!",
         )
 
-        url = reverse('login')
-        data = {
-            "email_or_phone": "test@example.com",
-            "password": "TestPass123!"
-        }
+        url = reverse("login")
+        data = {"email_or_phone": "test@example.com", "password": "TestPass123!"}
 
-        response = self.client.post(url, data, format='json')
+        response = self.client.post(url, data, format="json")
         assert response.status_code == status.HTTP_200_OK
-        assert 'access' in response.data
-        assert 'user' in response.data
+        assert "access" in response.data
+        assert "user" in response.data
 
     def test_login_invalid_credentials(self):
         """Test login with invalid credentials"""
-        url = reverse('login')
+        url = reverse("login")
         data = {
             "email_or_phone": "nonexistent@example.com",
-            "password": "WrongPassword123!"
+            "password": "WrongPassword123!",
         }
 
-        response = self.client.post(url, data, format='json')
+        response = self.client.post(url, data, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
@@ -109,24 +104,22 @@ class TestAltarEndpoints:
         self.client = APIClient()
 
         self.org_node = OrganizationNode.objects.create(
-            name="Test Region",
-            code="TEST",
-            is_active=True
+            name="Test Region", code="TEST", is_active=True
         )
 
         self.altar = Altar.objects.create(
             name="Test Altar",
             code="TEST_ALTAR",
             parent_node=self.org_node,
-            is_active=True
+            is_active=True,
         )
 
     def test_altar_list(self):
         """Test altar list endpoint"""
-        url = reverse('altar_list')
+        url = reverse("altar_list")
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'altars' in response.data
+        assert "altars" in response.data
 
 
 @pytest.mark.django_db
@@ -143,20 +136,18 @@ class TestMemberEndpoints:
             email="test@example.com",
             first_name="Test",
             last_name="User",
-            password="TestPass123!"
+            password="TestPass123!",
         )
 
         self.org_node = OrganizationNode.objects.create(
-            name="Test Region",
-            code="TEST",
-            is_active=True
+            name="Test Region", code="TEST", is_active=True
         )
 
         self.altar = Altar.objects.create(
             name="Test Altar",
             code="TEST_ALTAR2",
             parent_node=self.org_node,
-            is_active=True
+            is_active=True,
         )
 
         # Authenticate client
@@ -165,13 +156,13 @@ class TestMemberEndpoints:
     def test_member_list_requires_auth(self):
         """Test that member list requires authentication"""
         client = APIClient()  # Unauthenticated client
-        url = '/api/members/list/'
+        url = "/api/members/list/"
         response = client.get(url)
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_member_list_authenticated(self):
         """Test member list with authentication"""
-        url = '/api/members/list/'
+        url = "/api/members/list/"
         response = self.client.get(url)
         # Should return 200 even if empty
         assert response.status_code == status.HTTP_200_OK
@@ -180,9 +171,9 @@ class TestMemberEndpoints:
 # Test configuration override for SQLite (avoids PostgreSQL extension issues)
 @override_settings(
     DATABASES={
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': ':memory:',
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": ":memory:",
         }
     }
 )

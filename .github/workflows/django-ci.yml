@@ -10,60 +10,50 @@ permissions:
   contents: read
   packages: write
 
-# Standard variables used across jobs
 env:
   PYTHON_VERSION: '3.11'
-  # Registry URL for GitHub's free container storage
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # 1. QUALITY CONTROL JOB
+  # 1. QUALITY CONTROL JOB (Unchanged)
   test-and-lint:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'apps/backend/requirements.txt'
-
       - name: Install Dependencies
         working-directory: ./apps/backend
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install safety bandit # Standard tooling
-
+          pip install safety bandit
       - name: Linting (Code Style with Ruff)
         working-directory: ./apps/backend
         run: ruff check . --output-format=github --ignore=E501
-
       - name: Security Audit (Packages & Code)
         working-directory: ./apps/backend
         run: |
           safety check
           bandit -r . -ll
-
       - name: Run Django Tests
         working-directory: ./apps/backend
         env:
           SECRET_KEY: "temporary-key-for-testing"
           DJANGO_SETTINGS_MODULE: "config.ci_settings"
         run: |
-          # Create tables without migrations to avoid PostgreSQL-specific indexes
           python manage.py migrate --run-syncdb
           python manage.py test
 
-  # 2. PACKAGING JOB (Artifact Verification)
+  # 2. PACKAGING & VERIFICATION JOB
   build-and-push-docker:
-    needs: test-and-lint # RULE: Only build if tests are green
+    needs: test-and-lint
     runs-on: ubuntu-latest
-    # Permissions required to write to the GitHub Container Registry
     permissions:
       contents: read
       packages: write
@@ -82,7 +72,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels)
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -91,13 +81,51 @@ jobs:
             type=ref,event=branch
             type=sha,format=short
 
-      - name: Build and Push Docker Image
+      # --- NEW: STEP 1: BUILD LOCALLY FOR TESTING ---
+      - name: Build Image Locally
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/backend
+          push: false # Do NOT push yet!
+          load: true  # Load it into the local Docker daemon for testing
+          tags: test-image:latest
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+
+      # --- NEW: STEP 2: CONTAINER BEHAVIOR TEST (SMOKE TEST) ---
+      - name: Verify Container Behavior
+        run: |
+          # Start the container with dummy env vars
+          docker run -d --name smoke-test \
+            -p 8000:8000 \
+            -e SECRET_KEY="smoke-test-key" \
+            -e DEBUG=True \
+            test-image:latest
+          
+          # Give it 10 seconds to initialize (Gunicorn/Django startup time)
+          sleep 10
+          
+          # Check if the container is still running (didn't crash immediately)
+          if [ "$(docker inspect -f '{{.State.Running}}' smoke-test)" != "true" ]; then
+            echo "Error: Container crashed on startup!"
+            docker logs smoke-test
+            exit 1
+          fi
+          
+          # Hit the health check or login endpoint
+          # Using --fail makes curl return a non-zero exit code on 4xx/5xx errors
+          curl --fail http://localhost:8000/admin/login/ || (docker logs smoke-test && exit 1)
+          
+          echo "Container behavior verified successfully!"
+          docker stop smoke-test && docker rm smoke-test
+
+      # --- STEP 3: FINAL PUSH ---
+      # Only runs if the Verification step above passes
+      - name: Push Verified Image to Registry
         uses: docker/build-push-action@v5
         with:
           context: ./apps/backend
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Use registry cache which is more reliable than GHA cache
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
