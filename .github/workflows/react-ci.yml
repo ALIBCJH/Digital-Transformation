@@ -15,7 +15,7 @@ env:
   NODE_VERSION: '20'
   # Registry URL for GitHub's free container storage
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-frontend
+  IMAGE_NAME: alibcjh/digital-transformation-frontend
 
 jobs:
   # 1. QUALITY CONTROL JOB
