@@ -3,12 +3,8 @@ name: React Frontend CI
 on:
   push:
     branches: [ main, develop, 'feature/**' ]
-    paths:
-      - 'apps/frontend/**'  # Only trigger when frontend code changes
   pull_request:
     branches: [ main, develop ]
-    paths:
-      - 'apps/frontend/**'
 
 permissions:
   contents: read

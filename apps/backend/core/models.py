@@ -90,6 +90,7 @@ class OrganizationNode(models.Model):
             models.Index(fields=['depth', 'is_active']),
             models.Index(fields=['path']),  # Critical for ancestor queries
             # GIN index for path prefix matching (Postgres-specific)
+            # Requires pg_trgm extension which is now installed in CI
             GinIndex(fields=['path'], name='path_gin_idx', opclasses=['gin_trgm_ops']),
         ]
         constraints = [
