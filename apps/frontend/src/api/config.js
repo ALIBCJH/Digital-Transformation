@@ -17,12 +17,6 @@ const apiConfig = {
       list: '/api/superadmin/',
       detail: (id) => `/api/superadmin/${id}/`,
     },
-    // Superadmin endpoints
-    superadmin: {
-      create: '/api/superadmin/create/',
-      list: '/api/superadmin/',
-      detail: (id) => `/api/superadmin/${id}/`,
-    },
     // Members endpoints
     members: {
       list: '/members/list/',

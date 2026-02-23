@@ -144,7 +144,7 @@ const AdminDashboard = () => {
     return fullName.includes(query) || memberNumber.includes(query) || email.includes(query);
   });
 
-  const activeMembers = members.filter(m => m.is_active !== false).length;
+  const _activeMembers = members.filter(m => m.is_active !== false).length;
   const totalMembers = members.length;
 
   if (!user) return null;
