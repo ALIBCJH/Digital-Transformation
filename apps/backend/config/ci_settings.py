@@ -1,8 +1,7 @@
 # CI settings for GitHub Actions
 # Uses SQLite to avoid PostgreSQL extension dependencies
 
-from .settings import *
-import os
+from .settings import *  # noqa: F403, F401
 
 # Use SQLite for CI to avoid PostgreSQL extension issues
 DATABASES = {
