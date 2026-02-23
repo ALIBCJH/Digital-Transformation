@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { mockAuth } from '../api/mockAuth';
+import { authService } from '../api/services';
 
 const Login = () => {
   const [formData, setFormData] = useState({
-    email: '',
+    email_or_phone: '',
     password: '',
   });
   const [error, setError] = useState('');
@@ -24,13 +24,15 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await mockAuth.login(formData.email, formData.password);
+      const response = await authService.login(formData.email_or_phone, formData.password);
+      
+      // Store tokens and user data
       localStorage.setItem('access_token', response.access);
       localStorage.setItem('refresh_token', response.refresh);
       localStorage.setItem('user', JSON.stringify(response.user));
       
-      // Route based on user role
-      if (response.user.role === 'admin') {
+      // Route based on user role/type
+      if (response.user.is_superadmin || response.user.is_staff) {
         navigate('/admin');
       } else {
         navigate('/dashboard');
@@ -59,23 +61,6 @@ const Login = () => {
             Welcome Back
           </h3>
 
-          {/* Demo credentials hint */}
-          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-4 text-sm">
-            <p className="font-semibold mb-2">Demo Credentials:</p>
-            <div className="space-y-2">
-              <div>
-                <p className="text-xs font-semibold text-blue-900 mb-1">Super Admin:</p>
-                <p>Email: <code className="bg-blue-100 px-2 py-1 rounded">demo@example.com</code></p>
-                <p>Password: <code className="bg-blue-100 px-2 py-1 rounded">password123</code></p>
-              </div>
-              <div className="border-t border-blue-200 pt-2">
-                <p className="text-xs font-semibold text-blue-900 mb-1">Admin:</p>
-                <p>Email: <code className="bg-blue-100 px-2 py-1 rounded">admin@example.com</code></p>
-                <p>Password: <code className="bg-blue-100 px-2 py-1 rounded">admin123</code></p>
-              </div>
-            </div>
-          </div>
-
           {error && (
             <div className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-lg mb-4">
               {error}
@@ -84,18 +69,18 @@ const Login = () => {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
-                Email Address
+              <label htmlFor="email_or_phone" className="block text-sm font-semibold text-gray-700 mb-2">
+                Email or Phone Number
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
+                id="email_or_phone"
+                name="email_or_phone"
+                type="text"
                 required
-                value={formData.email}
+                value={formData.email_or_phone}
                 onChange={handleChange}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 transition-all"
-                placeholder="you@example.com"
+                placeholder="you@example.com or +254700123456"
               />
             </div>
 

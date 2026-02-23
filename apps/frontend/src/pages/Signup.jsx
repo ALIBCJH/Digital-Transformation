@@ -1,18 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { mockAuth } from '../api/mockAuth';
+import { authService, altarService } from '../api/services';
 
 const Signup = () => {
   const [formData, setFormData] = useState({
-    email: '',
+    first_name: '',
+    last_name: '',
+    email_or_phone: '',
+    altar: '',
     password: '',
-    confirmPassword: '',
-    firstName: '',
-    lastName: '',
+    password2: '',
   });
+  const [altars, setAltars] = useState([]);
+  const [loadingAltars, setLoadingAltars] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  // Fetch altars on component mount
+  useEffect(() => {
+    const fetchAltars = async () => {
+      try {
+        const response = await altarService.list();
+        setAltars(response.altars || response.results || response || []);
+      } catch (err) {
+        console.error('Failed to load altars:', err);
+        // Altars require authentication, so we'll let users type the altar name
+        setAltars([]);
+      } finally {
+        setLoadingAltars(false);
+      }
+    };
+    fetchAltars();
+  }, []);
 
   const handleChange = (e) => {
     setFormData({
@@ -25,26 +45,28 @@ const Signup = () => {
     e.preventDefault();
     setError('');
 
-    if (formData.password !== formData.confirmPassword) {
+    if (formData.password !== formData.password2) {
       setError('Passwords do not match');
+      return;
+    }
+
+    if (!formData.altar) {
+      setError('Please select an altar');
       return;
     }
 
     setLoading(true);
 
     try {
-      const { confirmPassword: _confirmPassword, ...signupData } = formData;
-      const response = await mockAuth.signup(signupData);
+      const response = await authService.register(formData);
+      
+      // Store tokens and user data
       localStorage.setItem('access_token', response.access);
       localStorage.setItem('refresh_token', response.refresh);
       localStorage.setItem('user', JSON.stringify(response.user));
       
-      // Route based on user role (new signups are regular users)
-      if (response.user.role === 'admin') {
-        navigate('/admin');
-      } else {
-        navigate('/dashboard');
-      }
+      // Route to admin dashboard for regular admins
+      navigate('/admin');
     } catch (err) {
       setError(err.message || 'Failed to create account. Please try again.');
     } finally {
@@ -72,15 +94,15 @@ const Signup = () => {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="firstName" className="block text-sm font-semibold text-gray-700 mb-2">
+                <label htmlFor="first_name" className="block text-sm font-semibold text-gray-700 mb-2">
                   First Name
                 </label>
                 <input
-                  id="firstName"
-                  name="firstName"
+                  id="first_name"
+                  name="first_name"
                   type="text"
                   required
-                  value={formData.firstName}
+                  value={formData.first_name}
                   onChange={handleChange}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 transition-all"
                   placeholder="John"
@@ -88,15 +110,15 @@ const Signup = () => {
               </div>
 
               <div>
-                <label htmlFor="lastName" className="block text-sm font-semibold text-gray-700 mb-2">
+                <label htmlFor="last_name" className="block text-sm font-semibold text-gray-700 mb-2">
                   Last Name
                 </label>
                 <input
-                  id="lastName"
-                  name="lastName"
+                  id="last_name"
+                  name="last_name"
                   type="text"
                   required
-                  value={formData.lastName}
+                  value={formData.last_name}
                   onChange={handleChange}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 transition-all"
                   placeholder="Doe"
@@ -105,19 +127,60 @@ const Signup = () => {
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
-                Email Address
+              <label htmlFor="email_or_phone" className="block text-sm font-semibold text-gray-700 mb-2">
+                Email or Phone Number
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
+                id="email_or_phone"
+                name="email_or_phone"
+                type="text"
                 required
-                value={formData.email}
+                value={formData.email_or_phone}
                 onChange={handleChange}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 transition-all"
-                placeholder="you@example.com"
+                placeholder="you@example.com or +254700123456"
               />
+            </div>
+
+            <div>
+              <label htmlFor="altar" className="block text-sm font-semibold text-gray-700 mb-2">
+                Altar
+              </label>
+              {altars.length > 0 ? (
+                <select
+                  id="altar"
+                  name="altar"
+                  required
+                  value={formData.altar}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 transition-all"
+                  disabled={loadingAltars}
+                >
+                  <option value="">Select an altar...</option>
+                  {altars.map((altar) => (
+                    <option key={altar.id} value={altar.name}>
+                      {altar.name} - {altar.city}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  id="altar"
+                  name="altar"
+                  type="text"
+                  required
+                  value={formData.altar}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 transition-all"
+                  placeholder="Enter altar name (e.g., Nyeri Main Altar)"
+                  disabled={loadingAltars}
+                />
+              )}
+              {!loadingAltars && altars.length === 0 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Please enter the exact altar name as registered in the system
+                </p>
+              )}
             </div>
 
             <div>
@@ -137,15 +200,15 @@ const Signup = () => {
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-700 mb-2">
+              <label htmlFor="password2" className="block text-sm font-semibold text-gray-700 mb-2">
                 Confirm Password
               </label>
               <input
-                id="confirmPassword"
-                name="confirmPassword"
+                id="password2"
+                name="password2"
                 type="password"
                 required
-                value={formData.confirmPassword}
+                value={formData.password2}
                 onChange={handleChange}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 transition-all"
                 placeholder="••••••••"

@@ -10,9 +10,10 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
-from pathlib import Path
 from datetime import timedelta
-from decouple import config, Csv
+from pathlib import Path
+
+from decouple import Csv, config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,7 +23,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-sn&8xg4p8!nmxp$v1tge!s892e@+p@hi7w5b+(3x59elz9+y3s')
+SECRET_KEY = config(
+    'SECRET_KEY',
+    default='django-insecure-sn&8xg4p8!nmxp$v1tge!s892e@+p@hi7w5b+(3x59elz9+y3s'
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
@@ -101,7 +105,10 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        'NAME': (
+            'django.contrib.auth.password_validation.'
+            'UserAttributeSimilarityValidator'
+        ),
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',

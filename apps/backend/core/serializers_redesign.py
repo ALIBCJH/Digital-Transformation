@@ -13,7 +13,8 @@ Provides consistent JSON structure:
 """
 
 from rest_framework import serializers
-from .models_redesign import OrganizationNode, Altar, User, Member
+
+from .models_redesign import Altar, Member, OrganizationNode
 
 
 class NodeBreadcrumbSerializer(serializers.ModelSerializer):

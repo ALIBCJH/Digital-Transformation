@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand
+
 from core.models import OrganizationUnit
 
 
@@ -39,7 +40,9 @@ class Command(BaseCommand):
             defaults={'is_active': True}
         )
         if created:
-            self.stdout.write(self.style.SUCCESS(f'✓ Created region: {nyeri_region.name}'))
+            self.stdout.write(
+                self.style.SUCCESS(f'✓ Created region: {nyeri_region.name}')
+            )
         else:
             self.stdout.write(f'- Region already exists: {nyeri_region.name}')
 
@@ -64,9 +67,15 @@ class Command(BaseCommand):
             )
             if created:
                 created_count += 1
-                self.stdout.write(self.style.SUCCESS(f'✓ Created sub-region: {sub_region_name}'))
+                self.stdout.write(
+                    self.style.SUCCESS(f'✓ Created sub-region: {sub_region_name}')
+                )
             else:
-                self.stdout.write(self.style.WARNING(f'- Sub-region already exists: {sub_region_name}'))
+                self.stdout.write(
+                    self.style.WARNING(
+                        f'- Sub-region already exists: {sub_region_name}'
+                    )
+                )
 
             # Also create the altar entry for the same location
             altar, altar_created = OrganizationUnit.objects.get_or_create(
@@ -77,13 +86,16 @@ class Command(BaseCommand):
             )
             if altar_created:
                 created_count += 1
-                self.stdout.write(self.style.SUCCESS(f'  ✓ Created altar: {sub_region_name}'))
+                self.stdout.write(
+                    self.style.SUCCESS(f'  ✓ Created altar: {sub_region_name}')
+                )
             else:
                 self.stdout.write(f'  - Altar already exists: {sub_region_name}')
 
         self.stdout.write(
             self.style.SUCCESS(
-                f'\n✅ Seeding completed! Created {created_count} new organizational units.'
+                f'\n✅ Seeding completed! '
+                f'Created {created_count} new organizational units.'
             )
         )
 

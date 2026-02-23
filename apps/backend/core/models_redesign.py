@@ -3,17 +3,18 @@ REDESIGNED MODELS FOR SCALABLE HIERARCHICAL ORGANIZATION
 =========================================================
 
 This redesign implements:
-1. Recursive self-referential OrganizationNode (eliminates separate Region/Sub-Region tables)
+1. Recursive self-referential OrganizationNode (
+   eliminates separate Region/Sub-Region tables
+)
 2. Optimized tree traversal with Postgres indexing
 3. Multi-tenant filtering at the database level
 4. Separate Altar entity for physical locations
 5. Materialized Path pattern for O(1) ancestor queries
 """
 
-from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.contrib.postgres.indexes import GinIndex
-
+from django.db import models
 
 # ============================================
 # CORE HIERARCHICAL ORGANIZATION
@@ -195,8 +196,12 @@ class Altar(models.Model):
     # Location details
     address = models.TextField(blank=True)
     city = models.CharField(max_length=100, blank=True)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
 
     # Leadership
     pastor = models.ForeignKey(
@@ -261,7 +266,10 @@ class User(AbstractUser):
         related_name='admins',
         null=True,
         blank=True,
-        help_text='The organizational node this user can manage (e.g., Central Region, Nyeri Sub-Region)'
+        help_text=(
+            'The organizational node this user can manage '
+            '(e.g., Central Region, Nyeri Sub-Region)'
+        )
     )
 
     # Metadata

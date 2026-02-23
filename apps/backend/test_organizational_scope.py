@@ -6,9 +6,11 @@ organizational units (Region, Sub-Region, or Altar).
 """
 
 import os
+
 import django
 from django.db import transaction
-from core.models import User, OrganizationUnit
+
+from core.models import OrganizationNode, User
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
@@ -21,13 +23,13 @@ def demo_organizational_scope():
 
     # Get organizational units
     try:
-        nyeri_region = OrganizationUnit.objects.get(
-            name="Nyeri Main Altar", level="REGION")
-        mweiga_altar = OrganizationUnit.objects.get(
-            name="Mweiga Altar", level="ALTAR")
-        karatina_altar = OrganizationUnit.objects.get(
-            name="Karatina Main Altar", level="ALTAR")
-    except OrganizationUnit.DoesNotExist as e:
+        nyeri_region = OrganizationNode.objects.get(
+            name="Nyeri Main Altar")
+        mweiga_altar = OrganizationNode.objects.get(
+            name="Mweiga Altar")
+        karatina_altar = OrganizationNode.objects.get(
+            name="Karatina Main Altar")
+    except OrganizationNode.DoesNotExist as e:
         print(f"❌ Error: {e}")
         print("Run 'python manage.py seed_altars' first!\n")
         return

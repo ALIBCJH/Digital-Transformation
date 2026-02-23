@@ -24,7 +24,8 @@ Usage:
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from core.models import OrganizationNode, Altar, User
+
+from core.models import Altar, OrganizationNode, User
 
 
 class Command(BaseCommand):
@@ -32,7 +33,9 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
-        self.stdout.write(self.style.SUCCESS('🌱 Seeding Central Region Demo Data...\n'))
+        self.stdout.write(
+            self.style.SUCCESS('🌱 Seeding Central Region Demo Data...\n')
+        )
 
         # =============================================
         # 1. CREATE ROOT NODE: CENTRAL REGION
@@ -46,9 +49,13 @@ class Command(BaseCommand):
         )
 
         if created:
-            self.stdout.write(self.style.SUCCESS(f'✓ Created: {central_region.name}'))
+            self.stdout.write(
+                self.style.SUCCESS(f'✓ Created: {central_region.name}')
+            )
         else:
-            self.stdout.write(self.style.WARNING(f'→ Already exists: {central_region.name}'))
+            self.stdout.write(
+                self.style.WARNING(f'→ Already exists: {central_region.name}')
+            )
 
         # =============================================
         # 2. CREATE SUB-REGIONS
@@ -132,7 +139,11 @@ class Command(BaseCommand):
         ).count()
         central_region.save()
 
-        self.stdout.write(self.style.SUCCESS(f'  ✓ Central Region: {central_region.total_altars} altars'))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f'  ✓ Central Region: {central_region.total_altars} altars'
+            )
+        )
 
         # =============================================
         # 5. CREATE DEMO ADMIN USERS
@@ -155,7 +166,7 @@ class Command(BaseCommand):
             central_admin.set_password('admin123')
             central_admin.save()
             self.stdout.write(self.style.SUCCESS(
-                f'  ✓ Central Admin (username: central_admin, password: admin123)'
+                '  ✓ Central Admin (username: central_admin, password: admin123)'
             ))
             self.stdout.write(self.style.SUCCESS(
                 f'    Scope: {central_region.name} → Can see all 6 sub-regions'
@@ -177,17 +188,19 @@ class Command(BaseCommand):
             nyeri_admin.set_password('admin123')
             nyeri_admin.save()
             self.stdout.write(self.style.SUCCESS(
-                f'  ✓ Nyeri Admin (username: nyeri_admin, password: admin123)'
+                '  ✓ Nyeri Admin (username: nyeri_admin, password: admin123)'
             ))
             self.stdout.write(self.style.SUCCESS(
-                f'    Scope: Nyeri → Can see only Nyeri + 2 altars'
+                '    Scope: Nyeri → Can see only Nyeri + 2 altars'
             ))
 
         # =============================================
         # 6. SUMMARY
         # =============================================
         self.stdout.write('\n' + '='*60)
-        self.stdout.write(self.style.SUCCESS('✅ CENTRAL REGION DEMO DATA SEEDED SUCCESSFULLY!\n'))
+        self.stdout.write(
+            self.style.SUCCESS('✅ CENTRAL REGION DEMO DATA SEEDED SUCCESSFULLY!\n')
+        )
 
         self.stdout.write('📋 Summary:')
         self.stdout.write(f'  • 1 Region: {central_region.name}')

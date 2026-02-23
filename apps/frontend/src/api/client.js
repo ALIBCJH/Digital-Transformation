@@ -50,12 +50,32 @@ class ApiClient {
             return await this.handleResponse(retryResponse);
           } else {
             this.removeAuthToken();
-            window.location.href = '/login';
+            // Only redirect to login if we're not already on login/signup pages
+            const currentPath = window.location.pathname;
+            if (currentPath !== '/login' && currentPath !== '/signup') {
+              window.location.href = '/login';
+            }
             throw new Error('Session expired. Please login again.');
           }
         }
         const error = await response.json();
-        throw new Error(error.message || 'An error occurred');
+        console.error('API Error Response:', error);
+        // Handle different error response formats
+        let errorMessage;
+        if (error.non_field_errors) {
+          errorMessage = error.non_field_errors[0] || error.non_field_errors.join(', ');
+        } else if (error.detail) {
+          errorMessage = error.detail;
+        } else if (error.message) {
+          errorMessage = error.message;
+        } else if (error.error) {
+          errorMessage = error.error;
+        } else {
+          // Handle field-specific errors
+          const firstError = Object.values(error)[0];
+          errorMessage = Array.isArray(firstError) ? firstError[0] : JSON.stringify(error);
+        }
+        throw new Error(errorMessage);
       }
 
       return await this.handleResponse(response);

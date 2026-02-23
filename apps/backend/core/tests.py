@@ -1,8 +1,9 @@
-from django.test import TestCase
 from django.contrib.auth import get_user_model
-from rest_framework.test import APITestCase, APIClient
+from django.test import TestCase
 from rest_framework import status
-from core.models import OrganizationUnit, Member
+from rest_framework.test import APIClient, APITestCase
+
+from core.models import Member, OrganizationNode
 
 User = get_user_model()
 
@@ -12,9 +13,10 @@ class ModelTests(TestCase):
 
     def setUp(self):
         """Set up test data"""
-        self.organization_unit = OrganizationUnit.objects.create(
+        self.organization_unit = OrganizationNode.objects.create(
             name='Test Altar',
-            level='ALTAR',
+            code='TEST_ALTAR',
+            depth=0,
             is_active=True
         )
 
@@ -44,9 +46,10 @@ class APITests(APITestCase):
     def setUp(self):
         """Set up test client and data"""
         self.client = APIClient()
-        self.altar = OrganizationUnit.objects.create(
+        self.altar = OrganizationNode.objects.create(
             name='Test Altar',
-            level='ALTAR',
+            code='TEST_ALTAR',
+            depth=0,
             is_active=True
         )
 

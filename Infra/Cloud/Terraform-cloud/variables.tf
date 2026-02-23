@@ -16,3 +16,14 @@ variable "ssh_key_name" {
     type = string
     description = "Name of the SSH key aas it appears in DigitalOcean"
 }
+variable "django_secret_key" {
+    type = string
+    description = "Django secret key for production"
+    sensitive = true
+}
+
+variable "allowed_hosts" {
+    type = string
+    description = "Allowed hosts for Django"
+    default = "*"
+}

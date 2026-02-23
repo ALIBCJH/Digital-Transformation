@@ -1,10 +1,14 @@
-from rest_framework import serializers
 from django.contrib.auth import authenticate
-from core.models import User, Member, Altar, OrganizationNode
+from rest_framework import serializers
+
+from core.models import Altar, Member, OrganizationNode, User
 
 
 class RegisterSerializer(serializers.ModelSerializer):
-    """Simplified registration: first_name, last_name, email_or_phone, altar, password"""
+    """
+    Simplified registration: first_name, last_name, email_or_phone,
+    altar, password
+    """
     password = serializers.CharField(write_only=True, min_length=8)
     password2 = serializers.CharField(write_only=True, min_length=8)
     email_or_phone = serializers.CharField(
@@ -17,11 +21,15 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['first_name', 'last_name', 'email_or_phone', 'altar', 'password', 'password2']
+        fields = [
+            'first_name', 'last_name', 'email_or_phone',
+            'altar', 'password', 'password2'
+        ]
 
     def validate_email_or_phone(self, value):
         """Check if it's email or phone and validate uniqueness"""
-        # Simple check: if contains @, treat as email, otherwise as phone
+        # Simple check: if contains @, treat as email,
+        # otherwise as phone
         if '@' in value:
             # It's an email
             if User.objects.filter(email=value).exists():
@@ -38,10 +46,10 @@ class RegisterSerializer(serializers.ModelSerializer):
         try:
             altar = Altar.objects.get(name=value, is_active=True)
             return altar
-        except Altar.DoesNotExist:
+        except Altar.DoesNotExist as err:
             raise serializers.ValidationError(
                 f"Altar '{value}' does not exist. Please provide a valid altar name."
-            )
+            ) from err
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
@@ -137,10 +145,13 @@ class SuperAdminRegisterSerializer(serializers.Serializer):
                 is_active=True
             )
             attrs['scope_node'] = scope_node
-        except OrganizationNode.DoesNotExist:
+        except OrganizationNode.DoesNotExist as err:
             raise serializers.ValidationError({
-                "admin_scope": f"Organization node with code '{attrs['admin_scope']}' does not exist"
-            })
+                "admin_scope": (
+                    f"Organization node with code '{attrs['admin_scope']}' "
+                    "does not exist"
+                )
+            }) from err
 
         return attrs
 
@@ -198,15 +209,15 @@ class LoginSerializer(serializers.Serializer):
             try:
                 user = User.objects.get(email=email_or_phone)
                 username = user.username
-            except User.DoesNotExist:
-                raise serializers.ValidationError("Invalid credentials")
+            except User.DoesNotExist as err:
+                raise serializers.ValidationError("Invalid credentials") from err
         else:
             # Try to find user by phone
             try:
                 user = User.objects.get(phone_number=email_or_phone)
                 username = user.username
-            except User.DoesNotExist:
-                raise serializers.ValidationError("Invalid credentials")
+            except User.DoesNotExist as err:
+                raise serializers.ValidationError("Invalid credentials") from err
 
         # Authenticate using username
         user = authenticate(username=username, password=password)
@@ -258,8 +269,10 @@ class MemberSerializer(serializers.ModelSerializer):
         try:
             altar = Altar.objects.get(name=value, is_active=True)
             return altar
-        except Altar.DoesNotExist:
-            raise serializers.ValidationError(f"Altar '{value}' does not exist. Please provide a valid altar name.")
+        except Altar.DoesNotExist as err:
+            raise serializers.ValidationError(
+                f"Altar '{value}' does not exist. Please provide a valid altar name."
+            ) from err
 
     def validate_phone_number(self, value):
         """Ensure the phone number is valid"""
@@ -309,8 +322,10 @@ class MemberTransferSerializer(serializers.Serializer):
         try:
             member = Member.objects.get(id=value, is_active=True)
             return member
-        except Member.DoesNotExist:
-            raise serializers.ValidationError(f"Active member with ID {value} does not exist")
+        except Member.DoesNotExist as err:
+            raise serializers.ValidationError(
+                f"Active member with ID {value} does not exist"
+            ) from err
 
     def validate_to_altar_id(self, value):
         """Validate that the altar exists if provided"""
@@ -319,8 +334,10 @@ class MemberTransferSerializer(serializers.Serializer):
         try:
             altar = Altar.objects.get(id=value, is_active=True)
             return altar
-        except Altar.DoesNotExist:
-            raise serializers.ValidationError(f"Active altar with ID {value} does not exist")
+        except Altar.DoesNotExist as err:
+            raise serializers.ValidationError(
+                f"Active altar with ID {value} does not exist"
+            ) from err
 
 
 # TODO: Re-enable after creating AttendanceLog model
@@ -358,23 +375,25 @@ class BulkAttendanceSerializer(serializers.Serializer):
             from core.models import Altar
             altar = Altar.objects.get(id=value, is_active=True)
             return altar
-        except Altar.DoesNotExist:
-            raise serializers.ValidationError(f"Altar with ID {value} does not exist")
+        except Altar.DoesNotExist as err:
+            raise serializers.ValidationError(
+                f"Altar with ID {value} does not exist"
+            ) from err
 
     def validate_attendance(self, value):
         """Validate that all member IDs exist"""
         from core.models import Member
         member_ids = [record['member_id'] for record in value]
-        
+
         existing_members = Member.objects.filter(
             id__in=member_ids,
             is_active=True
         ).values_list('id', flat=True)
-        
+
         invalid_ids = set(member_ids) - set(existing_members)
         if invalid_ids:
             raise serializers.ValidationError(
                 f"Invalid member IDs: {list(invalid_ids)}"
             )
-        
+
         return value

@@ -54,11 +54,11 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install flake8 safety bandit # Standard tooling
+          pip install safety bandit # Standard tooling
 
-      - name: Linting (Code Style)
+      - name: Linting (Code Style with Ruff)
         working-directory: ./apps/backend
-        run: flake8 . --count --max-line-length=127 --statistics --exclude=venv,migrations
+        run: ruff check . --output-format=github --ignore=E501
 
       - name: Security Audit (Packages & Code)
         working-directory: ./apps/backend

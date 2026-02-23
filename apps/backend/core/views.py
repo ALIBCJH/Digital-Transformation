@@ -1,20 +1,31 @@
+
+from django.db import transaction
+from django.db.models import Count
+from django.utils import timezone
 from rest_framework import generics, status
-from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.utils import timezone
-from django.db import transaction
-from django.db.models import Count, Q
-from datetime import timedelta
-from core.models import User, Member, Altar, OrganizationNode, MemberTransferHistory, Guest, AttendanceLog
-from .serializers import (
-    MemberSerializer, RegisterSerializer, LoginSerializer,
-    MemberTransferSerializer, SuperAdminRegisterSerializer,
-    BulkAttendanceSerializer
+
+from core.models import (
+    Altar,
+    AttendanceLog,
+    Guest,
+    Member,
+    MemberTransferHistory,
+    OrganizationNode,
+    User,
 )
-from .permissions import (
-    HasOrganizationalScope, CanManageMembers, CanTransferMembers
+
+from .permissions import CanManageMembers, CanTransferMembers, HasOrganizationalScope
+from .serializers import (
+    BulkAttendanceSerializer,
+    LoginSerializer,
+    MemberSerializer,
+    MemberTransferSerializer,
+    RegisterSerializer,
+    SuperAdminRegisterSerializer,
 )
 
 
@@ -683,7 +694,7 @@ class SuperAdminDashboardView(APIView):
         # Calculate growth rate (month-over-month)
         today = timezone.now().date()
         current_month_start = today.replace(day=1)
-        last_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
+        # last_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
 
         # New members this month
         new_members_this_month = all_members.filter(
@@ -739,7 +750,7 @@ class SuperAdminDashboardView(APIView):
         for altar in all_altars.order_by('-member_count')[:10]:
             altar_members = Member.objects.filter(home_altar=altar, is_active=True).count()
             altar_guests = Guest.objects.filter(visited_altar=altar).count()
-            
+
             top_altars.append({
                 "name": altar.name,
                 "city": altar.city,
@@ -903,7 +914,7 @@ class BulkAttendanceView(APIView):
                 region = current_node
             elif current_node.depth == 0:
                 country = current_node
-            
+
             current_node = current_node.parent
 
         # For continent, we need to go one more level up from country

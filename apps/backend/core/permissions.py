@@ -1,5 +1,4 @@
 from rest_framework import permissions
-from core.models import User
 
 
 class HasOrganizationalScope(permissions.BasePermission):
@@ -7,7 +6,10 @@ class HasOrganizationalScope(permissions.BasePermission):
     Permission to check if admin has organizational scope assigned.
     Superusers bypass this check.
     """
-    message = "You must be assigned to an organizational unit (region, sub-region, or altar) to perform this action."
+    message = (
+        "You must be assigned to an organizational unit "
+        "(region, sub-region, or altar) to perform this action."
+    )
 
     def has_permission(self, request, view):
         # Superusers can do anything
@@ -24,7 +26,8 @@ class HasOrganizationalScope(permissions.BasePermission):
 class CanManageMembers(permissions.BasePermission):
     """
     Permission to check if admin can manage members based on their organizational scope.
-    Admins can only manage members within their assigned organizational unit and its descendants.
+    Admins can only manage members within their assigned organizational unit
+    and its descendants.
     """
     message = "You can only manage members within your organizational scope."
 
@@ -53,7 +56,10 @@ class CanManageMembers(permissions.BasePermission):
 
 # TODO: Re-enable after creating Guest model
 # class CanManageGuests(permissions.BasePermission):
-#     """Permission to check if admin can manage guests based on their organizational scope."""
+#     """
+#     Permission to check if admin can manage guests
+#     based on their organizational scope.
+#     """
 #     ...
 
 
