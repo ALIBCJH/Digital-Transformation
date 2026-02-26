@@ -21,3 +21,5 @@ crash.log
 **/override.tf
 **//override.tf.json
 **//terraform.lock.hcl
+# Exclude .terraformrc and terraform.rc files, which may contain sensitive information
+
