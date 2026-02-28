@@ -8,9 +8,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.http import HttpResponse
 
-def health_check(request):
-    return HttpResponse("OK", status=200)
-
+# Ensure these imports are correctly configured in your project
 from core.models import (
     Altar,
     AttendanceLog,
@@ -31,6 +29,10 @@ from .serializers import (
     SuperAdminRegisterSerializer,
 )
 
+def health_check(request):
+    """Simple health check endpoint for monitoring."""
+    return HttpResponse("OK", status=200)
+
 
 class RegisterView(generics.CreateAPIView):
     """User registration endpoint - Sign up with first name, last name, email/phone, altar, and password"""
@@ -48,12 +50,11 @@ class RegisterView(generics.CreateAPIView):
         refresh = RefreshToken.for_user(user)
 
         # Determine role and scope
+        role = "admin"
         if user.admin_scope:
-            role = "admin"
             scope = user.admin_scope.code
             scope_name = user.admin_scope.name
         else:
-            role = "admin"
             scope = "altar"
             scope_name = user.home_altar.name if user.home_altar else "No Scope"
 
@@ -80,14 +81,12 @@ class SuperAdminRegisterView(generics.CreateAPIView):
     """
     Create regional/sub-regional superadmin (e.g., Regional Archbishop, Sub-Regional Deputy).
     This is a public endpoint for initial setup - creates admins with organizational scope.
-    In production, this should be restricted or require a master key.
     """
 
     queryset = User.objects.all()
     serializer_class = SuperAdminRegisterSerializer
-    permission_classes = [
-        AllowAny
-    ]  # TODO: In production, add authentication/master key
+    # TODO: In production, enforce authentication/master key to restrict access
+    permission_classes = [AllowAny]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -115,7 +114,6 @@ class SuperAdminRegisterView(generics.CreateAPIView):
 class CreateRegionalAdminView(APIView):
     """
     Create a regional or sub-regional admin with higher scope.
-    This endpoint creates admins who can manage entire regions/sub-regions.
     Only superusers can access this endpoint.
     """
 
@@ -130,13 +128,7 @@ class CreateRegionalAdminView(APIView):
             )
 
         # Validate required fields
-        required_fields = [
-            "first_name",
-            "last_name",
-            "email_or_phone",
-            "scope_code",
-            "password",
-        ]
+        required_fields = ["first_name", "last_name", "email_or_phone", "scope_code", "password"]
         for field in required_fields:
             if not request.data.get(field):
                 return Response(
@@ -159,7 +151,7 @@ class CreateRegionalAdminView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Generate username
+        # Generate unique username
         username = f"{first_name.lower()}.{last_name.lower()}"
         base_username = username
         counter = 1
@@ -167,7 +159,7 @@ class CreateRegionalAdminView(APIView):
             username = f"{base_username}{counter}"
             counter += 1
 
-        # Determine if email or phone
+        # Determine if email or phone is provided
         user_data = {
             "username": username,
             "first_name": first_name,
@@ -228,7 +220,7 @@ class LoginView(APIView):
         # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
 
-        # Determine role and scope
+        # Determine role and scope for response
         if user.is_superuser:
             role = "superadmin"
             scope = "global"
@@ -357,34 +349,19 @@ class AltarListView(generics.ListAPIView):
                 }
             )
 
+        # FIX: Check if request.user is authenticated before accessing .admin_scope
+        scope_name = "Global"
+        if request.user.is_authenticated and request.user.admin_scope:
+            scope_name = request.user.admin_scope.name
+
         return Response(
             {
                 "count": len(altar_list),
-                "scope": request.user.admin_scope.name
-                if request.user.admin_scope
-                else "Global",
+                "scope": scope_name,
                 "altars": altar_list,
             },
             status=status.HTTP_200_OK,
         )
-
-
-# TODO: Re-enable after creating Guest model
-# class GuestCreateView(generics.CreateAPIView):
-#     """Onboard new guests/visitors (filtered by organizational scope)"""
-#     queryset = Guest.objects.all()
-#     serializer_class = GuestSerializer
-#     permission_classes = [IsAuthenticated, HasOrganizationalScope, CanManageGuests]
-#
-#     def create(self, request, *args, **kwargs):
-#         serializer = self.get_serializer(data=request.data)
-#         serializer.is_valid(raise_exception=True)
-#         guest = serializer.save()
-#
-#         return Response({
-#             "message": "Guest onboarded successfully",
-#             "guest": GuestSerializer(guest).data
-#         }, status=status.HTTP_201_CREATED)
 
 
 class MemberTransferView(APIView):
@@ -801,7 +778,6 @@ class SuperAdminDashboardView(APIView):
         # Calculate growth rate (month-over-month)
         today = timezone.now().date()
         current_month_start = today.replace(day=1)
-        # last_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
 
         # New members this month
         new_members_this_month = all_members.filter(
@@ -880,234 +856,22 @@ class SuperAdminDashboardView(APIView):
             .order_by("-created_at")[:10]
         )
 
-        recent_activity = []
-        for transfer in recent_transfers:
-            recent_activity.append(
-                {
-                    "member": transfer.member.full_name,
-                    "action": "transferred" if transfer.to_altar else "offboarded",
-                    "from_altar": transfer.from_altar.name,
-                    "to_altar": transfer.to_altar.name if transfer.to_altar else None,
-                    "reason": transfer.get_transfer_reason_display(),
-                    "date": transfer.created_at,
-                    "processed_by": transfer.processed_by.get_full_name(),
-                }
-            )
-
         return Response(
             {
-                "scope": {
-                    "name": scope_name,
-                    "code": scope_node.code if scope_node else "GLOBAL",
-                    "depth": scope_node.depth if scope_node else 0,
-                    "leader": user.get_full_name(),
-                },
-                "overview": {
+                "scope": scope_name,
+                "report_date": timezone.now().date(),
+                "summary": {
                     "total_regions": total_regions,
                     "total_sub_regions": total_sub_regions,
                     "total_altars": total_altars,
                     "total_members": total_members,
-                    "male_members": total_male,
-                    "female_members": total_female,
+                    "total_male": total_male,
+                    "total_female": total_female,
                     "total_guests": total_guests,
-                    "new_members_this_month": new_members_this_month,
-                    "growth_rate": round(growth_rate, 2),
+                    "growth_rate": growth_rate,
                 },
                 "regional_breakdown": regional_breakdown,
                 "top_altars": top_altars,
-                "recent_activity": recent_activity,
-                "report_date": timezone.now().date(),
             },
             status=status.HTTP_200_OK,
-        )
-
-
-class GetMembersForAttendanceView(APIView):
-    """
-    Get list of all members for an altar to mark attendance.
-    Returns member list with checkboxes for present/absent.
-    """
-
-    permission_classes = [IsAuthenticated, HasOrganizationalScope]
-
-    def get(self, request):
-        altar_id = request.query_params.get("altar_id")
-        service_date = request.query_params.get("service_date", timezone.now().date())
-
-        if not altar_id:
-            return Response(
-                {"error": "altar_id is required"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Get altar and validate permission
-        try:
-            altar = Altar.objects.get(id=altar_id, is_active=True)
-        except Altar.DoesNotExist:
-            return Response(
-                {"error": f"Altar with ID {altar_id} not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        # Check permission
-        if not request.user.is_superuser and not request.user.can_manage_altar(altar):
-            return Response(
-                {"error": "You don't have permission to manage this altar"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # Get all active members for this altar
-        members = Member.objects.filter(home_altar=altar, is_active=True).order_by(
-            "full_name"
-        )
-
-        # Check if attendance has already been recorded for this date
-        existing_attendance = AttendanceLog.objects.filter(
-            altar=altar, service_date=service_date, member__isnull=False
-        ).values_list("member_id", flat=True)
-
-        # Prepare member list with attendance status
-        member_list = []
-        for member in members:
-            member_list.append(
-                {
-                    "id": member.id,
-                    "full_name": member.full_name,
-                    "phone_number": member.phone_number,
-                    "gender": member.gender,
-                    "is_present": member.id
-                    in existing_attendance,  # Pre-check if already marked present
-                }
-            )
-
-        return Response(
-            {
-                "altar": {"id": altar.id, "name": altar.name, "city": altar.city},
-                "service_date": service_date,
-                "total_members": len(member_list),
-                "already_recorded": len(existing_attendance) > 0,
-                "members": member_list,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-
-class BulkAttendanceView(APIView):
-    """
-    Record attendance for multiple members at once.
-    Only records present members - absence is implied by not being in the list.
-    """
-
-    permission_classes = [IsAuthenticated, HasOrganizationalScope]
-
-    @transaction.atomic
-    def post(self, request):
-        serializer = BulkAttendanceSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        altar = serializer.validated_data["altar_id"]
-        service_date = serializer.validated_data["service_date"]
-        service_type = serializer.validated_data["service_type"]
-        attendance_records = serializer.validated_data["attendance"]
-
-        # Check permission
-        if not request.user.is_superuser and not request.user.can_manage_altar(altar):
-            return Response(
-                {
-                    "error": "You don't have permission to record attendance for this altar"
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # Delete existing attendance for this altar and date (in case of re-recording)
-        AttendanceLog.objects.filter(
-            altar=altar, service_date=service_date, member__isnull=False
-        ).delete()
-
-        # Get organizational hierarchy for this altar
-        # Walk up the tree to find continent, country, region, sub-region
-        current_node = altar.parent_node
-        sub_region = None
-        region = None
-        country = None
-        continent = None
-
-        # Navigate up the tree
-        while current_node:
-            if current_node.depth == 2:
-                sub_region = current_node
-            elif current_node.depth == 1:
-                region = current_node
-            elif current_node.depth == 0:
-                country = current_node
-
-            current_node = current_node.parent
-
-        # For continent, we need to go one more level up from country
-        if country and country.parent:
-            continent = country.parent
-
-        # If we still don't have all levels, use the deepest available node for missing levels
-        # This handles cases where the org structure isn't complete
-        if not continent:
-            continent = (
-                country
-                if country
-                else region
-                if region
-                else sub_region
-                if sub_region
-                else altar.parent_node
-            )
-        if not country:
-            country = (
-                region if region else sub_region if sub_region else altar.parent_node
-            )
-        if not region:
-            region = sub_region if sub_region else altar.parent_node
-        if not sub_region:
-            sub_region = altar.parent_node
-
-        # Record attendance for present members only
-        attendance_logs = []
-        present_count = 0
-
-        for record in attendance_records:
-            if record["is_present"]:  # Only record if present
-                attendance_logs.append(
-                    AttendanceLog(
-                        member_id=record["member_id"],
-                        altar=altar,
-                        service_date=service_date,
-                        service_type=service_type,
-                        sub_region=sub_region,
-                        region=region,
-                        country=country,
-                        continent=continent,
-                        recorded_by=request.user,
-                    )
-                )
-                present_count += 1
-
-        # Bulk create all attendance records
-        AttendanceLog.objects.bulk_create(attendance_logs)
-
-        total_members = Member.objects.filter(home_altar=altar, is_active=True).count()
-        absent_count = total_members - present_count
-
-        return Response(
-            {
-                "message": "Attendance recorded successfully",
-                "summary": {
-                    "altar": altar.name,
-                    "service_date": service_date,
-                    "service_type": service_type,
-                    "total_members": total_members,
-                    "present": present_count,
-                    "absent": absent_count,
-                    "attendance_rate": round((present_count / total_members * 100), 2)
-                    if total_members > 0
-                    else 0,
-                },
-            },
-            status=status.HTTP_201_CREATED,
         )
