@@ -1,0 +1,297 @@
+name: Infrastructure & Deployment Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: # Manual trigger
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write # REQUIRED for OIDC authentication with AWS
+
+env:
+  PYTHON_VERSION: '3.11'
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE_NAME: alibcjh/digital-transformation-backend
+  FRONTEND_IMAGE_NAME: alibcjh/digital-transformation-frontend
+  AWS_REGION: eu-north-1
+  TERRAFORM_VERSION: '1.7.0'
+  TERRAFORM_DIR: './Infra/aws'
+
+jobs:
+  # ==========================================
+  # JOB 1: TERRAFORM INFRASTRUCTURE
+  # ==========================================
+  terraform:
+    name: Terraform Plan & Apply
+    runs-on: ubuntu-latest
+    outputs:
+      ec2_instance_id: ${{ steps.tf_output.outputs.instance_id }}
+      rds_endpoint: ${{ steps.tf_output.outputs.rds_endpoint }}
+      
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: true
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Format Check
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform fmt -check
+        continue-on-error: true
+
+      - name: Terraform Init
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=production/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: |
+          terraform plan \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -out=tfplan \
+            -no-color
+        continue-on-error: true
+
+      - name: Comment PR with Terraform Plan
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `#### Terraform Plan 📋
+            
+            <details><summary>Show Plan</summary>
+            
+            \`\`\`terraform
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+            
+            </details>
+            
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Terraform Apply
+        # Only apply on main branch, not on PRs
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      - name: Capture Terraform Outputs
+        id: tf_output
+        if: github.ref == 'refs/heads/main'
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: |
+          echo "instance_id=$(terraform output -raw ec2_instance_id)" >> $GITHUB_OUTPUT
+          echo "rds_endpoint=$(terraform output -raw rds_endpoint)" >> $GITHUB_OUTPUT
+
+  # ==========================================
+  # JOB 2: TEST & LINT
+  # ==========================================
+  test-and-lint:
+    name: Test & Lint Application
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'apps/backend/requirements.txt'
+          
+      - name: Install Dependencies
+        working-directory: ./apps/backend
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install 'safety>=3.2,<4.0' 'bandit[toml]>=1.7,<2.0'
+          
+      - name: Linting (Ruff)
+        working-directory: ./apps/backend
+        run: ruff check . --output-format=github --ignore=E501
+        
+      - name: Security Audit
+        working-directory: ./apps/backend
+        run: |
+          safety check
+          bandit -r . -ll
+          
+      - name: Run Django Tests
+        working-directory: ./apps/backend
+        env:
+          SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY || 'test-key-for-ci-only-not-production' }}
+          DJANGO_SETTINGS_MODULE: "config.ci_settings"
+        run: |
+          python manage.py migrate --run-syncdb
+          python manage.py test
+
+  # ==========================================
+  # JOB 3: BUILD & PUSH DOCKER IMAGES
+  # ==========================================
+  build-and-push-docker:
+    name: Build & Push Docker Images
+    needs: [terraform, test-and-lint]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- BACKEND IMAGE BUILD ---
+      - name: Extract Backend Metadata
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and Push Backend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/backend
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:buildcache,mode=max
+
+      # --- FRONTEND IMAGE BUILD ---
+      - name: Extract Frontend Metadata
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and Push Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/frontend
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:buildcache,mode=max
+
+  # ==========================================
+  # JOB 4: DEPLOY TO AWS EC2
+  # ==========================================
+  deploy-to-aws:
+    name: Deploy to AWS EC2
+    needs: [terraform, build-and-push-docker]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy Frontend & Backend to EC2 via SSM
+        env:
+          INSTANCE_ID: ${{ needs.terraform.outputs.ec2_instance_id || secrets.EC2_INSTANCE_ID }}
+        run: |
+          # Wait for instance to be ready (if just created)
+          aws ec2 wait instance-status-ok --instance-ids $INSTANCE_ID || true
+          
+          # Create base64 encoded docker-compose file
+          COMPOSE_B64=$(base64 -w 0 docker-compose.prod.yml)
+          
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "[{\"Key\":\"InstanceIds\",\"Values\":[\"$INSTANCE_ID\"]}]" \
+            --parameters "commands=[
+              \"echo '=== Starting Deployment ===' \",
+              \"cd /home/ubuntu || cd ~ \",
+              \"echo 'Logging into GitHub Container Registry...' \",
+              \"echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin \",
+              \"echo 'Creating docker-compose file...' \",
+              \"echo '${COMPOSE_B64}' | base64 -d > docker-compose.yml \",
+              \"echo 'Setting environment variables...' \",
+              \"export BACKEND_IMAGE=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7) \",
+              \"export FRONTEND_IMAGE=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7) \",
+              \"export DJANGO_SECRET_KEY='${{ secrets.DJANGO_SECRET_KEY }}' \",
+              \"export DATABASE_URL='${{ secrets.DATABASE_URL }}' \",
+              \"export ALLOWED_HOSTS='${{ secrets.ALLOWED_HOSTS }}' \",
+              \"echo 'Pulling latest images...' \",
+              \"docker-compose pull \",
+              \"echo 'Stopping existing containers...' \",
+              \"docker-compose down || true \",
+              \"echo 'Starting new containers...' \",
+              \"docker-compose up -d \",
+              \"echo 'Waiting for containers to be healthy...' \",
+              \"sleep 10 \",
+              \"docker ps \",
+              \"echo 'Cleaning up old images...' \",
+              \"docker image prune -af \",
+              \"echo '✅ Deployment completed successfully!' \"
+            ]" \
+            --output text \
+            --query "Command.CommandId"
+
+      - name: Deployment Summary
+        run: |
+          echo "### 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: Production" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Instance ID**: ${{ needs.terraform.outputs.ec2_instance_id || secrets.EC2_INSTANCE_ID }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backend Image**: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend Image**: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Application URLs" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend**: http://<ec2-ip>" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backend API**: http://<ec2-ip>:8000" >> $GITHUB_STEP_SUMMARY
