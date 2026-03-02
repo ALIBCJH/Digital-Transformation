@@ -55,11 +55,7 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ env.TERRAFORM_DIR }}
-        run: |
-          terraform init \
-            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-            -backend-config="key=production/terraform.tfstate" \
-            -backend-config="region=${{ env.AWS_REGION }}"
+        run: terraform init
 
       - name: Terraform Validate
         working-directory: ${{ env.TERRAFORM_DIR }}
