@@ -1,4 +1,0 @@
-do_token = "drop_v1_your_token_here"
-ssh_key_name = "your_ssh_key_name_here"
-region = "nyc3"
-django_secret_key = "njhrrewgrw_e7362"

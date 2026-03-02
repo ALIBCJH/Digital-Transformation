@@ -69,3 +69,7 @@ htmlcov/
 **/.terraform/*
 *.tfstate*
 *.pem
+# Terraform variable files with secrets
+terraform.tfvars
+terraform.tfvar
+*.auto.tfvars
