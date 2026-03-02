@@ -82,7 +82,8 @@ def demo_organizational_scope():
     # Test Regional Admin permissions
     print("👤 Regional Admin (regional_admin):")
     print(
-        f"   Assigned to: {regional_admin.organizational_unit.name} ({regional_admin.organizational_unit.level})"
+        f"   Assigned to: {regional_admin.organizational_unit.name} "
+        f"({regional_admin.organizational_unit.level})"
     )
     print("   Can manage: All altars within Nyeri Region")
 
@@ -92,10 +93,12 @@ def demo_organizational_scope():
         print(f"      ✓ {unit.name}")
 
     print(
-        f"\n   Can manage Mweiga Altar? {regional_admin.can_manage_unit(mweiga_altar)} ✅"
+        f"\n   Can manage Mweiga Altar? "
+        f"{regional_admin.can_manage_unit(mweiga_altar)} ✅"
     )
     print(
-        f"   Can manage Karatina Altar? {regional_admin.can_manage_unit(karatina_altar)} ✅"
+        f"   Can manage Karatina Altar? "
+        f"{regional_admin.can_manage_unit(karatina_altar)} ✅"
     )
 
     print("\n" + "-" * 80 + "\n")
@@ -103,7 +106,8 @@ def demo_organizational_scope():
     # Test Altar Admin permissions
     print("👤 Altar Admin (mweiga_admin):")
     print(
-        f"   Assigned to: {altar_admin.organizational_unit.name} ({altar_admin.organizational_unit.level})"
+        f"   Assigned to: {altar_admin.organizational_unit.name} "
+        f"({altar_admin.organizational_unit.level})"
     )
     print("   Can manage: Only Mweiga Altar")
 
@@ -113,10 +117,12 @@ def demo_organizational_scope():
         print(f"      ✓ {unit.name}")
 
     print(
-        f"\n   Can manage Mweiga Altar? {altar_admin.can_manage_unit(mweiga_altar)} ✅"
+        f"\n   Can manage Mweiga Altar? "
+        f"{altar_admin.can_manage_unit(mweiga_altar)} ✅"
     )
     print(
-        f"   Can manage Karatina Altar? {altar_admin.can_manage_unit(karatina_altar)} ❌"
+        f"   Can manage Karatina Altar? "
+        f"{altar_admin.can_manage_unit(karatina_altar)} ❌"
     )
 
     print("\n" + "=" * 80)
@@ -138,7 +144,8 @@ def demo_organizational_scope():
     print("   ✅ Regional Admin: Can record attendance for ANY altar in Nyeri Region")
     print("   ✅ Mweiga Admin: Can ONLY record attendance for Mweiga Altar")
     print(
-        "   ❌ Mweiga Admin: CANNOT record attendance for Karatina Altar (403 Forbidden)"
+        "   ❌ Mweiga Admin: CANNOT record attendance for Karatina Altar "
+        "(403 Forbidden)"
     )
 
     print("\n🔄 Member Transfer (POST /api/members/transfer/):")
