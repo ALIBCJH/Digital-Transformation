@@ -79,13 +79,12 @@ resource "aws_security_group" "allow_ssh_pg" {
   name   = "allow_ssh_and_postgres_v3"
   vpc_id = aws_vpc.main.id
 
-  # 1. SSH Access: Allow from your IP and GitHub Actions
+  # 1. SSH Access: Only allowed from your detected IP
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["${chomp(data.http.my_ip.response_body)}/32", "0.0.0.0/0"]
-    description = "SSH from local and GitHub Actions"
+    cidr_blocks = ["${chomp(data.http.my_ip.response_body)}/32"]
   }
 
   # 2. Database Access: Only allowed from within the VPC network
