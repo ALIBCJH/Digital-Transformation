@@ -2,7 +2,7 @@ name: Infrastructure & Deployment Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'feature/**' ]
   pull_request:
     branches: [ main ]
   workflow_dispatch: # Manual trigger
@@ -68,25 +68,72 @@ jobs:
           terraform plan \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
             -out=tfplan \
-            -no-color
+            -no-color | tee plan_output.txt
         continue-on-error: true
+
+      - name: Upload Terraform Plan
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: ${{ env.TERRAFORM_DIR }}/tfplan
+          retention-days: 5
+
+      - name: Terraform Plan Status Check
+        if: steps.plan.outcome == 'failure'
+        run: |
+          echo "::error::Terraform Plan Failed"
+          exit 1
+
+      - name: Generate Plan Summary
+        if: always()
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        run: |
+          echo "### 📊 Terraform Plan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ${{ steps.plan.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f plan_output.txt ]; then
+            echo "<details><summary>View Terraform Plan</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```terraform' >> $GITHUB_STEP_SUMMARY
+            cat plan_output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Comment PR with Terraform Plan
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
-            const output = `#### Terraform Plan 📋
+            const fs = require('fs');
+            const planOutput = fs.existsSync('${{ env.TERRAFORM_DIR }}/plan_output.txt') 
+              ? fs.readFileSync('${{ env.TERRAFORM_DIR }}/plan_output.txt', 'utf8')
+              : 'Plan output not available';
             
-            <details><summary>Show Plan</summary>
+            const output = `#### 🏗️ Terraform Plan Results
+            
+            **Status**: ${{ steps.plan.outcome }}
+            **Triggered by**: @${{ github.actor }}
+            
+            <details><summary>📋 View Full Terraform Plan</summary>
             
             \`\`\`terraform
-            ${{ steps.plan.outputs.stdout }}
+            ${planOutput}
             \`\`\`
             
             </details>
             
-            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+            ---
+            💡 **Next Steps**: 
+            - Review the plan above
+            - If changes look good, approve and merge this PR
+            - Merging to \`main\` will automatically apply these changes
+            
+            *Workflow run: [${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*`;
             
             github.rest.issues.createComment({
               issue_number: context.issue.number,
