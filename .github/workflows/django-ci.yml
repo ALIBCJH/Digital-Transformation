@@ -33,7 +33,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install safety bandit
+          pip install 'safety>=3.2,<4.0' 'bandit[toml]>=1.7,<2.0'
       - name: Linting (Code Style with Ruff)
         working-directory: ./apps/backend
         run: ruff check . --output-format=github --ignore=E501
