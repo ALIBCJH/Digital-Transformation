@@ -17,9 +17,9 @@ class ModelTests(TestCase):
         self.organization_unit = OrganizationNode.objects.create(
             name="Test Region",
             code="TEST_REGION",
+            path="/TEST_REGION/",
             depth=1,
             is_active=True,
-            level="REGION",
         )
 
         self.altar = Altar.objects.create(
@@ -32,7 +32,7 @@ class ModelTests(TestCase):
     def test_organization_unit_creation(self):
         """Test organization unit can be created"""
         self.assertEqual(self.organization_unit.name, "Test Region")
-        self.assertEqual(self.organization_unit.level, "REGION")
+        self.assertEqual(self.organization_unit.path, "/TEST_REGION/")
         self.assertTrue(self.organization_unit.is_active)
 
     def test_member_creation(self):
@@ -41,7 +41,6 @@ class ModelTests(TestCase):
             full_name="Test Member",
             phone_number="+254712345678",
             gender="MALE",
-            serving_department="Youth",
             home_altar=self.altar,
         )
         self.assertEqual(member.full_name, "Test Member")
@@ -58,9 +57,9 @@ class APITests(APITestCase):
         self.org_node = OrganizationNode.objects.create(
             name="Test Region",
             code="TEST_REGION",
+            path="/TEST_REGION/",
             depth=1,
             is_active=True,
-            level="REGION",
         )
         self.altar = Altar.objects.create(
             name="Test Altar",
