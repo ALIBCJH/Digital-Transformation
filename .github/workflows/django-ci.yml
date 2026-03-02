@@ -45,7 +45,7 @@ jobs:
       - name: Run Django Tests
         working-directory: ./apps/backend
         env:
-          SECRET_KEY: "temporary-key-for-testing"
+          SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY || 'test-key-for-ci-only-not-production' }}
           DJANGO_SETTINGS_MODULE: "config.ci_settings"
         run: |
           python manage.py migrate --run-syncdb
