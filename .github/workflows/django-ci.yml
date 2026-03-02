@@ -55,6 +55,9 @@ jobs:
   build-and-push-docker:
     needs: test-and-lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     
     steps:
       - name: Checkout code
@@ -68,8 +71,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          # Uses the GHCR_TOKEN secret to log in
-          password: ${{ secrets.GHCR_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
