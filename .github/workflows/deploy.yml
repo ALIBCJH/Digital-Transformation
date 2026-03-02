@@ -1,35 +1,18 @@
-name: Deploy to EC2
+name: DEPRECATED - Deploy to EC2
+
+# ⚠️ THIS WORKFLOW IS DEPRECATED
+# Deployment is now handled in django-ci.yml
+# Kept for reference only - will be removed in future
 
 on:
-  workflow_run: # TRIGGER: Only run after another workflow completes
-    workflows: ["Django Production CI"] # MUST MATCH NAME IN django-ci.yml
-    types:
-      - completed # TRIGGER: When the CI workflow finishes
-
-jobs:
-  on-success:
-    runs-on: ubuntu-latest
-    # JOB: Only runs if the CI workflow was successful AND it was on main
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+  workflow_dispatch:  # Manual trigger only
     
+jobs:
+  deprecated-notice:
+    runs-on: ubuntu-latest
     steps:
-      - name: Deploy to EC2 via SSH
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            # 1. Login to GitHub Container Registry
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
-            # 2. Pull the latest image
-            # Note: This tag must match what your CI workflow pushes
-            docker pull ghcr.io/${{ github.repository }}/backend:main
-            
-            # 3. Stop and remove the old container
-            docker stop backend-container || true
-            docker rm backend-container || true
-            
-            # 4. Run the new container
-            docker run -d --name backend-container -p 8000:8000 ghcr.io/${{ github.repository }}/backend:main
+      - name: Deprecation Notice
+        run: |
+          echo "::warning::This workflow is deprecated"
+          echo "::warning::Use 'Django Production CI' workflow instead"
+          echo "::warning::This file will be removed in a future update"
