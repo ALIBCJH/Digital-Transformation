@@ -69,4 +69,3 @@ urlpatterns = [
     # List all available altars
     path("api/altars/", AltarListView.as_view(), name="altar_list"),
 ]
-        

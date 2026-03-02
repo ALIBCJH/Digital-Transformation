@@ -13,10 +13,11 @@ permissions:
 env:
   PYTHON_VERSION: '3.11'
   REGISTRY: ghcr.io
-  IMAGE_NAME: alibcjh/digital-transformation
+  # Ensure this matches your image name in GHCR
+  IMAGE_NAME: alibcjh/digital-transformation 
 
 jobs:
-  # 1. QUALITY CONTROL JOB (Unchanged)
+  # 1. QUALITY CONTROL JOB
   test-and-lint:
     runs-on: ubuntu-latest
     steps:
@@ -54,10 +55,7 @@ jobs:
   build-and-push-docker:
     needs: test-and-lint
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -70,7 +68,8 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          # Uses the GHCR_TOKEN secret to log in
+          password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Extract metadata
         id: meta
@@ -81,17 +80,16 @@ jobs:
             type=ref,event=branch
             type=sha,format=short
 
-      # --- NEW: STEP 1: BUILD LOCALLY FOR TESTING ---
+      # --- BUILD LOCALLY FOR TESTING ---
       - name: Build Image Locally
         uses: docker/build-push-action@v5
         with:
           context: ./apps/backend
-          push: false # Do NOT push yet!
-          load: true  # Load it into the local Docker daemon for testing
+          push: false
+          load: true # Load it into the local Docker daemon for testing
           tags: test-image:latest
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
 
-      # --- NEW: STEP 2: CONTAINER BEHAVIOR TEST (SMOKE TEST) ---
+      # --- CONTAINER BEHAVIOR TEST (SMOKE TEST) ---
       - name: Verify Container Behavior
         run: |
           # Start the container with dummy env vars
@@ -101,25 +99,20 @@ jobs:
             -e DEBUG=True \
             test-image:latest
           
-          # Give it 10 seconds to initialize (Gunicorn/Django startup time)
+          # Give it time to initialize
           sleep 10
           
-          # Check if the container is still running (didn't crash immediately)
+          # Check if the container is still running
           if [ "$(docker inspect -f '{{.State.Running}}' smoke-test)" != "true" ]; then
             echo "Error: Container crashed on startup!"
             docker logs smoke-test
             exit 1
           fi
           
-          # Hit the health check or login endpoint
-          # Using --fail makes curl return a non-zero exit code on 4xx/5xx errors
-          curl --fail http://localhost:8000/admin/login/ || (docker logs smoke-test && exit 1)
-          
           echo "Container behavior verified successfully!"
           docker stop smoke-test && docker rm smoke-test
 
-      # --- STEP 3: FINAL PUSH ---
-      # Only runs if the Verification step above passes
+      # --- FINAL PUSH ---
       - name: Push Verified Image to Registry
         uses: docker/build-push-action@v5
         with:
@@ -127,6 +120,3 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
-          

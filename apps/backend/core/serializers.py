@@ -30,8 +30,6 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def validate_email_or_phone(self, value):
         """Check if it's email or phone and validate uniqueness"""
-        # Simple check: if contains @, treat as email,
-        # otherwise as phone
         if "@" in value:
             # It's an email
             if User.objects.filter(email=value).exists():
@@ -74,33 +72,35 @@ class RegisterSerializer(serializers.ModelSerializer):
         email_or_phone = validated_data.pop("email_or_phone")
         altar = validated_data.pop("altar")
 
-        # Generate username from first and last name
-        username = f"{validated_data['first_name'].lower()}.{validated_data['last_name'].lower()}"
+        # Generate username
+        first_name = validated_data["first_name"].lower()
+        last_name = validated_data["last_name"].lower()
+        username = f"{first_name}.{last_name}"
         base_username = username
         counter = 1
         while User.objects.filter(username=username).exists():
             username = f"{base_username}{counter}"
             counter += 1
 
-        # Create user based on whether email or phone was provided
-        # All users are admins managing their altar's scope
+        # Create user
         user_data = {
             "username": username,
             "first_name": validated_data["first_name"],
             "last_name": validated_data["last_name"],
             "password": validated_data["password"],
             "home_altar": altar,
-            "admin_scope": altar.parent_node,  # Admin manages the node containing their altar
-            "is_staff": True,  # All users are admins
+            # Admin manages the node containing their altar
+            "admin_scope": altar.parent_node,
+            "is_staff": True,
             "is_superuser": False,
         }
 
         if email_or_phone["type"] == "email":
             user_data["email"] = email_or_phone["value"]
-            user_data["phone_number"] = None  # Use None instead of empty string
+            user_data["phone_number"] = None
         else:
             user_data["phone_number"] = email_or_phone["value"]
-            user_data["email"] = ""  # Email can be empty string (AbstractUser default)
+            user_data["email"] = ""
 
         user = User.objects.create_user(**user_data)
         return user
@@ -123,7 +123,7 @@ class SuperAdminRegisterSerializer(serializers.Serializer):
     )
 
     def validate(self, attrs):
-        """Validate that passwords match and at least one of email/phone is provided"""
+        """Validate passwords and at least one of email/phone is provided"""
         if attrs["password"] != attrs["password2"]:
             raise serializers.ValidationError({"password": "Passwords do not match"})
 
@@ -135,13 +135,11 @@ class SuperAdminRegisterSerializer(serializers.Serializer):
                 "Either email or phone_number must be provided"
             )
 
-        # Validate email uniqueness if provided
+        # Validate uniqueness
         if email and User.objects.filter(email=email).exists():
             raise serializers.ValidationError(
                 {"email": "A user with this email already exists"}
             )
-
-        # Validate phone uniqueness if provided
         if phone and User.objects.filter(phone_number=phone).exists():
             raise serializers.ValidationError(
                 {"phone_number": "A user with this phone number already exists"}
@@ -167,7 +165,6 @@ class SuperAdminRegisterSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         """Create the superadmin user"""
-        # Generate username
         first_name = validated_data["first_name"]
         last_name = validated_data["last_name"]
         username = f"{first_name.lower()}.{last_name.lower()}"
@@ -177,14 +174,13 @@ class SuperAdminRegisterSerializer(serializers.Serializer):
             username = f"{base_username}{counter}"
             counter += 1
 
-        # Prepare user data
         user_data = {
             "username": username,
             "first_name": first_name,
             "last_name": last_name,
             "admin_scope": validated_data["scope_node"],
             "is_staff": True,
-            "is_superuser": False,  # Regional admins are NOT global superusers
+            "is_superuser": False,
         }
 
         email = validated_data.get("email", "").strip()
@@ -220,26 +216,23 @@ class LoginSerializer(serializers.Serializer):
 
         # Determine if it's email or phone
         if "@" in email_or_phone:
-            # Try to find user by email
             try:
                 user = User.objects.get(email=email_or_phone)
                 username = user.username
             except User.DoesNotExist as err:
                 raise serializers.ValidationError("Invalid credentials") from err
         else:
-            # Try to find user by phone
             try:
                 user = User.objects.get(phone_number=email_or_phone)
                 username = user.username
             except User.DoesNotExist as err:
                 raise serializers.ValidationError("Invalid credentials") from err
 
-        # Authenticate using username
+        # Authenticate
         user = authenticate(username=username, password=password)
 
         if not user:
             raise serializers.ValidationError("Invalid credentials")
-
         if not user.is_active:
             raise serializers.ValidationError("Account is disabled")
 
@@ -267,7 +260,6 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class MemberSerializer(serializers.ModelSerializer):
-    # Accept altar name as string for input, return it for output
     home_altar = serializers.CharField()
 
     class Meta:
@@ -287,19 +279,16 @@ class MemberSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "membership_date"]
 
     def validate_home_altar(self, value):
-        """Look up the altar by name"""
         try:
             altar = Altar.objects.get(name=value, is_active=True)
             return altar
         except Altar.DoesNotExist as err:
             raise serializers.ValidationError(
-                f"Altar '{value}' does not exist. Please provide a valid altar name."
+                f"Altar '{value}' does not exist."
             ) from err
 
     def validate_phone_number(self, value):
-        """Ensure the phone number is valid"""
         if value:
-            # Remove common phone number formatting characters
             cleaned = (
                 value.replace("+", "")
                 .replace("-", "")
@@ -309,23 +298,16 @@ class MemberSerializer(serializers.ModelSerializer):
             )
             if not cleaned.isdigit():
                 raise serializers.ValidationError(
-                    "Phone number must contain only digits, spaces, hyphens, or plus sign."
+                    "Phone number must contain only digits or formatting characters."
                 )
         return value
 
     def to_representation(self, instance):
-        """Return altar name instead of ID when reading"""
         representation = super().to_representation(instance)
         representation["home_altar"] = (
             instance.home_altar.name if instance.home_altar else None
         )
         return representation
-
-
-# TODO: Re-enable after creating Guest model
-# class GuestSerializer(serializers.ModelSerializer):
-#     """Serializer for guest onboarding"""
-#     ...
 
 
 class MemberTransferSerializer(serializers.Serializer):
@@ -335,7 +317,7 @@ class MemberTransferSerializer(serializers.Serializer):
     to_altar_id = serializers.IntegerField(
         required=False,
         allow_null=True,
-        help_text="Altar ID to transfer to. Leave empty/null to offboard (deactivate) the member.",
+        help_text="Altar ID to transfer to. Leave empty to offboard.",
     )
     reason = serializers.ChoiceField(
         choices=[
@@ -351,7 +333,6 @@ class MemberTransferSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True)
 
     def validate_member_id(self, value):
-        """Validate that the member exists and is active"""
         try:
             member = Member.objects.get(id=value, is_active=True)
             return member
@@ -361,7 +342,6 @@ class MemberTransferSerializer(serializers.Serializer):
             ) from err
 
     def validate_to_altar_id(self, value):
-        """Validate that the altar exists if provided"""
         if value is None:
             return None
         try:
@@ -373,7 +353,6 @@ class MemberTransferSerializer(serializers.Serializer):
             ) from err
 
 
-# TODO: Re-enable after creating AttendanceLog model
 class AttendanceRecordSerializer(serializers.Serializer):
     """Serializer for a single attendance record"""
 
@@ -382,10 +361,7 @@ class AttendanceRecordSerializer(serializers.Serializer):
 
 
 class BulkAttendanceSerializer(serializers.Serializer):
-    """
-    Serializer for bulk attendance recording.
-    Accepts altar_id, service_date, service_type, and list of member attendance.
-    """
+    """Serializer for bulk attendance recording."""
 
     altar_id = serializers.IntegerField()
     service_date = serializers.DateField()
@@ -405,10 +381,7 @@ class BulkAttendanceSerializer(serializers.Serializer):
     )
 
     def validate_altar_id(self, value):
-        """Validate that the altar exists"""
         try:
-            from core.models import Altar
-
             altar = Altar.objects.get(id=value, is_active=True)
             return altar
         except Altar.DoesNotExist as err:
@@ -417,11 +390,7 @@ class BulkAttendanceSerializer(serializers.Serializer):
             ) from err
 
     def validate_attendance(self, value):
-        """Validate that all member IDs exist"""
-        from core.models import Member
-
         member_ids = [record["member_id"] for record in value]
-
         existing_members = Member.objects.filter(
             id__in=member_ids, is_active=True
         ).values_list("id", flat=True)
@@ -431,5 +400,4 @@ class BulkAttendanceSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 f"Invalid member IDs: {list(invalid_ids)}"
             )
-
         return value

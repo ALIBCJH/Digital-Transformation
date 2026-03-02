@@ -1,17 +1,16 @@
 from django.db import transaction
 from django.db.models import Count
+from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.http import HttpResponse
 
 # Ensure these imports are correctly configured in your project
 from core.models import (
     Altar,
-    AttendanceLog,
     Guest,
     Member,
     MemberTransferHistory,
@@ -21,7 +20,6 @@ from core.models import (
 
 from .permissions import CanManageMembers, CanTransferMembers, HasOrganizationalScope
 from .serializers import (
-    BulkAttendanceSerializer,
     LoginSerializer,
     MemberSerializer,
     MemberTransferSerializer,
@@ -29,13 +27,17 @@ from .serializers import (
     SuperAdminRegisterSerializer,
 )
 
+
 def health_check(request):
     """Simple health check endpoint for monitoring."""
     return HttpResponse("OK", status=200)
 
 
 class RegisterView(generics.CreateAPIView):
-    """User registration endpoint - Sign up with first name, last name, email/phone, altar, and password"""
+    """
+    User registration endpoint - Sign up with first name, last name,
+    email/phone, altar, and password
+    """
 
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
@@ -79,8 +81,8 @@ class RegisterView(generics.CreateAPIView):
 
 class SuperAdminRegisterView(generics.CreateAPIView):
     """
-    Create regional/sub-regional superadmin (e.g., Regional Archbishop, Sub-Regional Deputy).
-    This is a public endpoint for initial setup - creates admins with organizational scope.
+    Create regional/sub-regional superadmin.
+    Public endpoint for initial setup - creates admins with organizational scope.
     """
 
     queryset = User.objects.all()
@@ -95,7 +97,7 @@ class SuperAdminRegisterView(generics.CreateAPIView):
 
         return Response(
             {
-                "message": f"Superadmin account created successfully for {user.admin_scope.name}",
+                "message": f"Superadmin account created for {user.admin_scope.name}",
                 "admin": {
                     "username": user.username,
                     "firstName": user.first_name,
@@ -128,7 +130,13 @@ class CreateRegionalAdminView(APIView):
             )
 
         # Validate required fields
-        required_fields = ["first_name", "last_name", "email_or_phone", "scope_code", "password"]
+        required_fields = [
+            "first_name",
+            "last_name",
+            "email_or_phone",
+            "scope_code",
+            "password",
+        ]
         for field in required_fields:
             if not request.data.get(field):
                 return Response(
@@ -147,7 +155,7 @@ class CreateRegionalAdminView(APIView):
             scope_node = OrganizationNode.objects.get(code=scope_code, is_active=True)
         except OrganizationNode.DoesNotExist:
             return Response(
-                {"error": f"Organization node with code '{scope_code}' does not exist"},
+                {"error": f"Node with code '{scope_code}' does not exist"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -181,7 +189,7 @@ class CreateRegionalAdminView(APIView):
         else:
             if User.objects.filter(phone_number=email_or_phone).exists():
                 return Response(
-                    {"error": "A user with this phone number already exists"},
+                    {"error": "A user with this phone already exists"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             user_data["phone_number"] = email_or_phone
@@ -192,7 +200,7 @@ class CreateRegionalAdminView(APIView):
 
         return Response(
             {
-                "message": f"Regional admin created successfully for {scope_node.name}",
+                "message": f"Regional admin created for {scope_node.name}",
                 "admin": {
                     "username": user.username,
                     "firstName": user.first_name,
@@ -268,8 +276,9 @@ class MemberCreateView(generics.CreateAPIView):
             return Response(
                 {
                     "error": (
-                        f"You don't have permission to create members for '{altar.name}'. "
-                        f"You can only manage altars within your organizational scope."
+                        f"You don't have permission to create members for "
+                        f"'{altar.name}'. You can only manage altars within your "
+                        f"organizational scope."
                     )
                 },
                 status=status.HTTP_403_FORBIDDEN,
@@ -287,13 +296,12 @@ class MemberCreateView(generics.CreateAPIView):
 
 
 class AltarListView(generics.ListAPIView):
-    """List all available altars within admin's organizational scope with optional filters"""
+    """List all available altars within admin's organizational scope"""
 
     permission_classes = [AllowAny]  # Allow unauthenticated access for signup
 
     def get(self, request, *args, **kwargs):
         # Base queryset based on user's scope
-        # If user is authenticated, filter by their scope
         if request.user.is_authenticated:
             if request.user.is_superuser:
                 altars = Altar.objects.filter(is_active=True).select_related(
@@ -304,7 +312,6 @@ class AltarListView(generics.ListAPIView):
                     "parent_node", "pastor"
                 )
         else:
-            # For unauthenticated users (e.g., signup page), return all active altars
             altars = Altar.objects.filter(is_active=True).select_related(
                 "parent_node", "pastor"
             )
@@ -349,7 +356,6 @@ class AltarListView(generics.ListAPIView):
                 }
             )
 
-        # FIX: Check if request.user is authenticated before accessing .admin_scope
         scope_name = "Global"
         if request.user.is_authenticated and request.user.admin_scope:
             scope_name = request.user.admin_scope.name
@@ -367,7 +373,7 @@ class AltarListView(generics.ListAPIView):
 class MemberTransferView(APIView):
     """
     Transfer member to another altar or offboard them (deactivate).
-    Filtered by organizational scope - admin must have access to both source and destination altars.
+    Filtered by organizational scope.
     """
 
     permission_classes = [IsAuthenticated, HasOrganizationalScope, CanTransferMembers]
@@ -389,14 +395,14 @@ class MemberTransferView(APIView):
             return Response(
                 {
                     "error": (
-                        f"You don't have permission to transfer members from '{member.home_altar.name}'. "
-                        f"You can only manage altars within your organizational scope."
+                        f"You don't have permission to transfer members from "
+                        f"'{member.home_altar.name}'."
                     )
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # If transferring (not offboarding), verify admin has permission for destination altar
+        # If transferring, verify admin has permission for destination altar
         if to_altar:
             if not request.user.is_superuser and not request.user.can_manage_altar(
                 to_altar
@@ -404,8 +410,8 @@ class MemberTransferView(APIView):
                 return Response(
                     {
                         "error": (
-                            f"You don't have permission to transfer members to '{to_altar.name}'. "
-                            f"You can only manage altars within your organizational scope."
+                            f"You don't have permission to transfer members to "
+                            f"'{to_altar.name}'."
                         )
                     },
                     status=status.HTTP_403_FORBIDDEN,
@@ -425,17 +431,21 @@ class MemberTransferView(APIView):
 
         # Update member status
         if to_altar:
-            # Transfer to new altar
             member.home_altar = to_altar
             member.save()
             action = "transferred"
-            message = f"Member '{member.full_name}' successfully transferred from '{from_altar.name}' to '{to_altar.name}'"
+            message = (
+                f"Member '{member.full_name}' successfully transferred "
+                f"from '{from_altar.name}' to '{to_altar.name}'"
+            )
         else:
-            # Offboard (deactivate)
             member.is_active = False
             member.save()
             action = "offboarded"
-            message = f"Member '{member.full_name}' successfully offboarded from '{from_altar.name}'"
+            message = (
+                f"Member '{member.full_name}' successfully offboarded "
+                f"from '{from_altar.name}'"
+            )
 
         return Response(
             {
@@ -483,7 +493,7 @@ class LogoutView(APIView):
 
 
 class MemberListView(generics.ListAPIView):
-    """List all active members for attendance marking (filtered by organizational scope)"""
+    """List members for attendance marking (filtered by scope)"""
 
     serializer_class = MemberSerializer
     permission_classes = [IsAuthenticated, HasOrganizationalScope]
@@ -493,9 +503,7 @@ class MemberListView(generics.ListAPIView):
         queryset = Member.objects.filter(is_active=True).select_related("home_altar")
 
         # Superusers see all members
-        if self.request.user.is_superuser:
-            pass  # No filtering needed
-        else:
+        if not self.request.user.is_superuser:
             # Regular admins only see members within their scope
             accessible_altars = self.request.user.get_accessible_altars()
             queryset = queryset.filter(home_altar__in=accessible_altars)
@@ -510,8 +518,7 @@ class MemberListView(generics.ListAPIView):
 
 class RegionalDashboardView(APIView):
     """
-    Regional dashboard showing aggregated metrics for all sub-regions and altars.
-    For Regional Superadmins (e.g., Senior Deputy Archbishop of Central Region)
+    Regional dashboard showing aggregated metrics.
     """
 
     permission_classes = [IsAuthenticated, HasOrganizationalScope]
@@ -519,15 +526,13 @@ class RegionalDashboardView(APIView):
     def get(self, request):
         user = request.user
 
-        # Get the organizational scope (e.g., CENTRAL region)
+        # Get the organizational scope
         if user.is_superuser:
-            # Global superadmin sees all regions
             root_nodes = OrganizationNode.objects.filter(
                 parent__isnull=False, depth=1, is_active=True
             )
             scope_name = "All Regions"
         elif user.admin_scope:
-            # Regional admin sees their region and sub-regions
             root_nodes = [user.admin_scope]
             scope_name = user.admin_scope.name
         else:
@@ -540,23 +545,20 @@ class RegionalDashboardView(APIView):
         regional_data = []
 
         for region in root_nodes:
-            # Get all descendant nodes (sub-regions) under this region
+            # Get all descendant nodes
             sub_regions = region.get_descendants(include_self=False).filter(
                 is_active=True
             )
 
-            # Get all altars under this region
             altars_in_region = Altar.objects.filter(
                 parent_node__in=region.get_descendants(include_self=True),
                 is_active=True,
             )
 
-            # Get all members under this region's altars
             members_in_region = Member.objects.filter(
                 home_altar__in=altars_in_region, is_active=True
             )
 
-            # Calculate metrics
             total_altars = altars_in_region.count()
             total_members = members_in_region.count()
             total_sub_regions = sub_regions.count()
@@ -609,7 +611,6 @@ class RegionalDashboardView(APIView):
                         "total_members": total_members,
                         "male_members": male_count,
                         "female_members": female_count,
-                        # TODO: Add these after implementing Guest and AttendanceLog models
                         "total_guests": 0,
                         "total_present_today": 0,
                         "total_absent_today": 0,
@@ -630,8 +631,7 @@ class RegionalDashboardView(APIView):
 
 class AltarDashboardView(APIView):
     """
-    Individual altar dashboard showing detailed metrics for one altar.
-    For Altar Admins
+    Individual altar dashboard showing detailed metrics.
     """
 
     permission_classes = [IsAuthenticated, HasOrganizationalScope]
@@ -643,7 +643,6 @@ class AltarDashboardView(APIView):
         altar_name = request.query_params.get("altar")
 
         if altar_name:
-            # Fetch specific altar
             try:
                 altar = Altar.objects.get(name=altar_name, is_active=True)
             except Altar.DoesNotExist:
@@ -652,34 +651,26 @@ class AltarDashboardView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-            # Check permission
             if not user.is_superuser and not user.can_manage_altar(altar):
                 return Response(
-                    {
-                        "error": "You don't have permission to view this altar's dashboard"
-                    },
+                    {"error": "Permission denied"},
                     status=status.HTTP_403_FORBIDDEN,
                 )
         else:
-            # Get user's primary altar if they're an altar admin
             accessible_altars = user.get_accessible_altars()
             if accessible_altars.count() == 0:
                 return Response(
-                    {"error": "No altars accessible"}, status=status.HTTP_403_FORBIDDEN
+                    {"error": "No altars accessible"},
+                    status=status.HTTP_403_FORBIDDEN,
                 )
-
-            # Default to first accessible altar
             altar = accessible_altars.first()
 
-        # Get members for this altar
         members = Member.objects.filter(home_altar=altar, is_active=True)
 
-        # Calculate metrics
         total_members = members.count()
         male_count = members.filter(gender="M").count()
         female_count = members.filter(gender="F").count()
 
-        # Department breakdown
         departments = (
             members.values("serving_department")
             .annotate(count=Count("id"))
@@ -703,7 +694,6 @@ class AltarDashboardView(APIView):
                     "total_members": total_members,
                     "male_members": male_count,
                     "female_members": female_count,
-                    # TODO: Add these after implementing Guest and AttendanceLog models
                     "total_guests": 0,
                     "present_today": 0,
                     "absent_today": 0,
@@ -729,7 +719,6 @@ class AltarDashboardView(APIView):
 class SuperAdminDashboardView(APIView):
     """
     Comprehensive dashboard for regional/sub-regional superadmins.
-    Shows overview of their entire organizational scope with key metrics.
     """
 
     permission_classes = [IsAuthenticated, HasOrganizationalScope]
@@ -737,32 +726,24 @@ class SuperAdminDashboardView(APIView):
     def get(self, request):
         user = request.user
 
-        # Get organizational scope
         if user.is_superuser:
-            # Global superadmin - show all regions
             scope_node = None
             scope_name = "Global - All Regions"
             all_nodes = OrganizationNode.objects.filter(is_active=True)
             all_altars = Altar.objects.filter(is_active=True)
         elif user.admin_scope:
-            # Regional/sub-regional admin
             scope_node = user.admin_scope
             scope_name = scope_node.name
             all_nodes = scope_node.get_descendants(include_self=True)
             all_altars = Altar.objects.filter(parent_node__in=all_nodes, is_active=True)
         else:
             return Response(
-                {"error": "No organizational scope assigned"},
-                status=status.HTTP_403_FORBIDDEN,
+                {"error": "No scope assigned"}, status=status.HTTP_403_FORBIDDEN
             )
 
-        # Get all members in scope
         all_members = Member.objects.filter(home_altar__in=all_altars, is_active=True)
-
-        # Get all guests in scope
         all_guests = Guest.objects.filter(visited_altar__in=all_altars)
 
-        # Overall statistics
         total_regions = all_nodes.filter(depth=1).count() if not scope_node else 0
         total_sub_regions = (
             all_nodes.filter(depth=2).count()
@@ -775,33 +756,26 @@ class SuperAdminDashboardView(APIView):
         total_female = all_members.filter(gender="F").count()
         total_guests = all_guests.count()
 
-        # Calculate growth rate (month-over-month)
         today = timezone.now().date()
         current_month_start = today.replace(day=1)
 
-        # New members this month
         new_members_this_month = all_members.filter(
             created_at__gte=current_month_start
         ).count()
-
-        # Members as of last month
         members_last_month = all_members.filter(
             created_at__lt=current_month_start
         ).count()
 
-        # Calculate growth rate percentage
-        if members_last_month > 0:
-            growth_rate = ((new_members_this_month) / members_last_month) * 100
-        else:
-            growth_rate = 100.0 if new_members_this_month > 0 else 0.0
+        growth_rate = (
+            ((new_members_this_month) / members_last_month) * 100
+            if members_last_month > 0
+            else (100.0 if new_members_this_month > 0 else 0.0)
+        )
 
-        # Regional breakdown (if global superadmin or regional admin)
         regional_breakdown = []
         if user.is_superuser:
-            # Group by top-level regions
             regions = OrganizationNode.objects.filter(depth=1, is_active=True)
         elif scope_node and scope_node.depth <= 1:
-            # Regional admin showing sub-regions
             regions = scope_node.get_children()
         else:
             regions = []
@@ -829,7 +803,6 @@ class SuperAdminDashboardView(APIView):
                 }
             )
 
-        # Top performing altars (by member count)
         top_altars = []
         for altar in all_altars.order_by("-member_count")[:10]:
             altar_members = Member.objects.filter(
@@ -848,13 +821,6 @@ class SuperAdminDashboardView(APIView):
                     else "Not Assigned",
                 }
             )
-
-        # Recent activity (recent member transfers)
-        recent_transfers = (
-            MemberTransferHistory.objects.filter(from_altar__in=all_altars)
-            .select_related("member", "from_altar", "to_altar", "processed_by")
-            .order_by("-created_at")[:10]
-        )
 
         return Response(
             {

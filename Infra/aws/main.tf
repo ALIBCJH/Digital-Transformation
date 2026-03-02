@@ -122,7 +122,7 @@ resource "aws_db_instance" "postgres" {
   instance_class         = "db.t3.micro"
   db_name                = "myappdb"
   username               = "simonadmin"
-  password               = "YourSecurePassword123!" # Change this before applying!
+  password               = var.db_password
   db_subnet_group_name   = aws_db_subnet_group.db_subnets.name
   vpc_security_group_ids = [aws_security_group.allow_ssh_pg.id]
   
