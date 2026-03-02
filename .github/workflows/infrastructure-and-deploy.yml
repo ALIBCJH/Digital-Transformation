@@ -10,7 +10,9 @@ on:
 permissions:
   contents: read
   packages: write
-  id-token: write # REQUIRED for OIDC authentication with AWS
+  pull-requests: write  # Required for PR comments
+  issues: write         # Required for issue/PR comments
+  id-token: write       # REQUIRED for OIDC authentication with AWS
 
 env:
   PYTHON_VERSION: '3.11'
@@ -150,11 +152,19 @@ jobs:
 
       - name: Capture Terraform Outputs
         id: tf_output
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         working-directory: ${{ env.TERRAFORM_DIR }}
         run: |
-          echo "instance_id=$(terraform output -raw ec2_instance_id)" >> $GITHUB_OUTPUT
-          echo "rds_endpoint=$(terraform output -raw rds_endpoint)" >> $GITHUB_OUTPUT
+          echo "instance_id=$(terraform output -raw ec2_instance_id || echo '')" >> $GITHUB_OUTPUT
+          echo "rds_endpoint=$(terraform output -raw rds_endpoint || echo '')" >> $GITHUB_OUTPUT
+          echo "ec2_public_ip=$(terraform output -raw ec2_public_ip || echo '')" >> $GITHUB_OUTPUT
+          
+      - name: Display Captured Outputs
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "Instance ID: ${{ steps.tf_output.outputs.instance_id }}"
+          echo "RDS Endpoint: ${{ steps.tf_output.outputs.rds_endpoint }}"
+          echo "EC2 Public IP: ${{ steps.tf_output.outputs.ec2_public_ip }}"
 
   # ==========================================
   # JOB 2: TEST & LINT
@@ -282,10 +292,30 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Validate Instance ID
+        id: validate_instance
+        run: |
+          TERRAFORM_INSTANCE='${{ needs.terraform.outputs.ec2_instance_id }}'
+          FALLBACK_INSTANCE='${{ secrets.EC2_INSTANCE_ID }}'
+          
+          # Use Terraform output if valid, otherwise use fallback
+          if [[ "$TERRAFORM_INSTANCE" =~ ^i-[a-f0-9]{17}$ ]]; then
+            echo "Using Terraform output: $TERRAFORM_INSTANCE"
+            echo "instance_id=$TERRAFORM_INSTANCE" >> $GITHUB_OUTPUT
+          elif [[ "$FALLBACK_INSTANCE" =~ ^i-[a-f0-9]{17}$ ]]; then
+            echo "Using fallback secret: $FALLBACK_INSTANCE"
+            echo "instance_id=$FALLBACK_INSTANCE" >> $GITHUB_OUTPUT
+          else
+            echo "::error::No valid EC2 instance ID found. Terraform output: '$TERRAFORM_INSTANCE', Fallback: '$FALLBACK_INSTANCE'"
+            exit 1
+          fi
+
       - name: Deploy Frontend & Backend to EC2 via SSM
         env:
-          INSTANCE_ID: ${{ needs.terraform.outputs.ec2_instance_id || secrets.EC2_INSTANCE_ID }}
+          INSTANCE_ID: ${{ steps.validate_instance.outputs.instance_id }}
         run: |
+          echo "Deploying to instance: $INSTANCE_ID"
+          
           # Wait for instance to be ready (if just created)
           aws ec2 wait instance-status-ok --instance-ids $INSTANCE_ID || true
           
@@ -326,15 +356,23 @@ jobs:
 
       - name: Deployment Summary
         run: |
+          # Get EC2 public IP
+          EC2_IP=$(aws ec2 describe-instances \
+            --instance-ids ${{ steps.validate_instance.outputs.instance_id }} \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          
           echo "### 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment**: Production" >> $GITHUB_STEP_SUMMARY
           echo "- **Region**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Instance ID**: ${{ needs.terraform.outputs.ec2_instance_id || secrets.EC2_INSTANCE_ID }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Instance ID**: ${{ steps.validate_instance.outputs.instance_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Public IP**: $EC2_IP" >> $GITHUB_STEP_SUMMARY
           echo "- **Backend Image**: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_STEP_SUMMARY
           echo "- **Frontend Image**: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔗 Application URLs" >> $GITHUB_STEP_SUMMARY
-          echo "- **Frontend**: http://<ec2-ip>" >> $GITHUB_STEP_SUMMARY
-          echo "- **Backend API**: http://<ec2-ip>:8000" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend**: http://$EC2_IP" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backend API**: http://$EC2_IP:8000" >> $GITHUB_STEP_SUMMARY
+          echo "- **SSH Access**: \`ssh -i juma-key.pem ubuntu@$EC2_IP\`" >> $GITHUB_STEP_SUMMARY
