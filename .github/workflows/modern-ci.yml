@@ -1,10 +1,9 @@
-name: Modern Python CI (Pull Requests Only)
+name: Modern Python CI (DISABLED - Use Django Production CI)
 
-# This workflow runs on PRs for quick feedback
-# Main branch uses Django Production CI for deployment
+# This workflow is disabled to avoid redundant checks
+# Django Production CI provides all necessary validation
 on:
-  pull_request:
-    branches: [ main, develop ]
+  workflow_dispatch:  # Manual trigger only if needed
 
 jobs:
   lint-and-test:
@@ -34,9 +33,10 @@ jobs:
         ruff check . --output-format=github --ignore=E501
     
     - name: Run Ruff Formatter Check
-      working-directory: ./apps/backend  
+      working-directory: ./apps/backend
+      continue-on-error: true
       run: |
-        ruff format --check . || echo "::warning::Code formatting issues found, but not blocking"
+        ruff format --check .
     
     - name: Run PyTest
       working-directory: ./apps/backend
