@@ -14,12 +14,10 @@ permissions:
 env:
   PYTHON_VERSION: '3.11'
   REGISTRY: ghcr.io
-  # Ensure this matches your image name in GHCR
   IMAGE_NAME: alibcjh/digital-transformation 
   AWS_REGION: us-east-1 # Change to your actual AWS region
 
 jobs:
-  # 1. QUALITY CONTROL JOB
   test-and-lint:
     runs-on: ubuntu-latest
     steps:
@@ -53,7 +51,6 @@ jobs:
           python manage.py migrate --run-syncdb
           python manage.py test
 
-  # 2. PACKAGING & VERIFICATION JOB
   build-and-push-docker:
     needs: test-and-lint
     runs-on: ubuntu-latest
@@ -84,7 +81,6 @@ jobs:
             type=ref,event=branch
             type=sha,format=short
 
-      # --- BUILD AND PUSH ---
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
@@ -95,11 +91,9 @@ jobs:
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
-  # 3. DEPLOYMENT TO AWS EC2
   deploy-to-aws:
     needs: build-and-push-docker
     runs-on: ubuntu-latest
-    # Added 'feature/**' to test deployment on feature branches
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')
     
     steps:
@@ -110,14 +104,12 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }} # The Role ARN you created
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }} # MUST exist in GitHub Secrets
           aws-region: ${{ env.AWS_REGION }}
 
-      # --- DEPLOYMENT ---
+      # --- DEPLOYMENT via SSM ---
       - name: Deploy to AWS EC2
         run: |
-          # Use AWS Systems Manager (SSM) to run commands remotely
-          
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets '[{"Key":"InstanceIds","Values":["${{ secrets.EC2_INSTANCE_ID }}"]}]' \
