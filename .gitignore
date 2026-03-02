@@ -66,3 +66,10 @@ htmlcov/
 # Migrations (optional - uncomment if you don't want to commit migrations)
 # */migrations/*.py
 # !*/migrations/__init__.py
+**/.terraform/*
+*.tfstate*
+*.pem
+# Terraform variable files with secrets
+terraform.tfvars
+terraform.tfvar
+*.auto.tfvars
