@@ -103,9 +103,9 @@ jobs:
       - name: Deploy to AWS EC2 via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.AWS_HOST }}
-          username: ${{ secrets.AWS_USER }}
-          key: ${{ secrets.AWS_SSH_KEY }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
           script: |
             # Login to GitHub Container Registry
@@ -125,7 +125,7 @@ jobs:
               -e SECRET_KEY="${{ secrets.DJANGO_SECRET_KEY }}" \
               -e DEBUG="False" \
               -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-              -e ALLOWED_HOSTS="${{ secrets.ALLOWED_HOSTS }}" \
+              -e ALLOWED_HOSTS="*" \
               ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
             
             # Clean up old images
