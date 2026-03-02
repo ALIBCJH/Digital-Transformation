@@ -9,12 +9,14 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write # REQUIRED for OIDC authentication with AWS
 
 env:
   PYTHON_VERSION: '3.11'
   REGISTRY: ghcr.io
   # Ensure this matches your image name in GHCR
   IMAGE_NAME: alibcjh/digital-transformation 
+  AWS_REGION: us-east-1 # Change to your actual AWS region
 
 jobs:
   # 1. QUALITY CONTROL JOB
@@ -100,33 +102,31 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     
     steps:
-      - name: Deploy to AWS EC2 via SSH
-        uses: appleboy/ssh-action@v1.0.0
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # --- OIDC AUTHENTICATION ---
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          script: |
-            # Login to GitHub Container Registry
-            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
-            # Pull the latest image
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-            
-            # Stop and remove old container
-            docker stop backend || true
-            docker rm backend || true
-            
-            # Run new container
-            docker run -d --name backend \
-              --restart unless-stopped \
-              -p 8000:8000 \
-              -e SECRET_KEY="${{ secrets.DJANGO_SECRET_KEY }}" \
-              -e DEBUG="False" \
-              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-              -e ALLOWED_HOSTS="*" \
-              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-            
-            # Clean up old images
-            docker image prune -af
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }} # The Role ARN you created
+          aws-region: ${{ env.AWS_REGION }}
+
+      # --- DEPLOYMENT ---
+      # This step assumes you have a script on your EC2 instance or use AWS SSM
+      - name: Deploy to AWS EC2
+        run: |
+          # Example using AWS Systems Manager (SSM) to run a command remotely
+          # without needing SSH open on the internet.
+          
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets '[{"Key":"InstanceIds","Values":["${{ secrets.EC2_INSTANCE_ID }}"]}]' \
+            --parameters 'commands=[
+              "docker login ghcr.io -u ${{ github.actor }} --password-stdin",
+              "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}",
+              "docker stop backend || true",
+              "docker rm backend || true",
+              "docker run -d --name backend --restart unless-stopped -p 8000:8000 -e SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }} -e DEBUG=False -e DATABASE_URL=${{ secrets.DATABASE_URL }} -e ALLOWED_HOSTS=* ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}",
+              "docker image prune -af"
+            ]'
