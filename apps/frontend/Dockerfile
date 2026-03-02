@@ -11,8 +11,11 @@ COPY package*.json ./
 # Install dependencies
 RUN npm ci --only=production=false
 
-# Copy source code
+# Copy source code and environment file
 COPY . .
+
+# Use production environment variables for build
+ENV VITE_API_BASE_URL=/api
 
 # Build the application
 RUN npm run build

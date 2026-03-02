@@ -87,7 +87,31 @@ resource "aws_security_group" "allow_ssh_pg" {
     cidr_blocks = ["${chomp(data.http.my_ip.response_body)}/32"]
   }
 
-  # 2. Database Access: Only allowed from within the VPC network
+  # 2. HTTP Access: Public access for frontend
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # 3. HTTPS Access: Public access for frontend (SSL)
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # 4. Backend API: Public access for API endpoints
+  ingress {
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # 5. Database Access: Only allowed from within the VPC network
   ingress {
     from_port   = 5432
     to_port     = 5432
@@ -101,15 +125,46 @@ resource "aws_security_group" "allow_ssh_pg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = { Name = "juma-web-security-group" }
 }
 
 # --- COMPUTE (EC2) ---
 resource "aws_instance" "web" {
   ami                    = "ami-08eb150f611ca277f"
-  instance_type          = "t3.micro"
+  instance_type          = "t3.small" # Upgraded for running both frontend and backend
   key_name               = aws_key_pair.generated_key.key_name
   vpc_security_group_ids = [aws_security_group.allow_ssh_pg.id]
   subnet_id              = aws_subnet.public.id
+
+  # User data script to install Docker and Docker Compose
+  user_data = <<-EOF
+              #!/bin/bash
+              set -e
+              
+              # Update system
+              apt-get update
+              apt-get upgrade -y
+              
+              # Install Docker
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sh get-docker.sh
+              usermod -aG docker ubuntu
+              
+              # Install Docker Compose
+              curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              chmod +x /usr/local/bin/docker-compose
+              
+              # Install SSM agent (if not present)
+              snap install amazon-ssm-agent --classic
+              systemctl enable snap.amazon-ssm-agent.amazon-ssm-agent.service
+              systemctl start snap.amazon-ssm-agent.amazon-ssm-agent.service
+              
+              # Create docker network for frontend-backend communication
+              docker network create app-network || true
+              
+              echo "Setup complete" > /var/log/user-data-complete.log
+              EOF
 
   tags = { Name = "Juma-Production-Server" }
 }
@@ -134,6 +189,26 @@ resource "aws_db_instance" "postgres" {
 # --- OUTPUTS ---
 output "ssh_command" {
   value = "ssh -i juma-key.pem ubuntu@${aws_instance.web.public_ip}"
+}
+
+output "ec2_instance_id" {
+  description = "EC2 Instance ID for deployment"
+  value       = aws_instance.web.id
+}
+
+output "ec2_public_ip" {
+  description = "Public IP of EC2 instance"
+  value       = aws_instance.web.public_ip
+}
+
+output "frontend_url" {
+  description = "Frontend application URL"
+  value       = "http://${aws_instance.web.public_ip}"
+}
+
+output "backend_url" {
+  description = "Backend API URL"
+  value       = "http://${aws_instance.web.public_ip}:8000"
 }
 
 output "rds_endpoint" {

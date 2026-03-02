@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  backend:
+    image: ${BACKEND_IMAGE}
+    container_name: backend
+    restart: unless-stopped
+    networks:
+      - app-network
+    ports:
+      - "8000:8000"
+    environment:
+      - SECRET_KEY=${DJANGO_SECRET_KEY}
+      - DEBUG=False
+      - DATABASE_URL=${DATABASE_URL}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    image: ${FRONTEND_IMAGE}
+    container_name: frontend
+    restart: unless-stopped
+    networks:
+      - app-network
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+networks:
+  app-network:
+    external: true
