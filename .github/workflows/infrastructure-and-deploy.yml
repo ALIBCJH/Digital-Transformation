@@ -10,7 +10,9 @@ on:
 permissions:
   contents: read
   packages: write
-  id-token: write # REQUIRED for OIDC authentication with AWS
+  pull-requests: write  # Required for PR comments
+  issues: write         # Required for issue/PR comments
+  id-token: write       # REQUIRED for OIDC authentication with AWS
 
 env:
   PYTHON_VERSION: '3.11'
