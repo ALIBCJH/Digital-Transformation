@@ -1,10 +1,10 @@
-name: Modern Python CI
+name: Modern Python CI (Pull Requests Only)
 
+# This workflow runs on PRs for quick feedback
+# Main branch uses Django Production CI for deployment
 on:
-  push:
-    branches: [ main, 'feature/**' ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
 
 jobs:
   lint-and-test:
