@@ -41,7 +41,7 @@ jobs:
     - name: Run PyTest
       working-directory: ./apps/backend
       env:
-        DJANGO_SETTINGS_MODULE: config.settings
+        DJANGO_SETTINGS_MODULE: config.ci_settings
       run: |
         # Use SQLite for tests to avoid PostgreSQL setup complexity
         pytest test_modern.py -v --tb=short --cov=core --cov-report=xml
