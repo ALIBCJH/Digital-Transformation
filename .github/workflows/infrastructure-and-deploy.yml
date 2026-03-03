@@ -488,16 +488,16 @@ jobs:
               \"echo \\\"✅ Found container: \$CONTAINER_ID\\\" \",
               \"CONTAINER_IMAGE=\$(docker inspect --format='{{.Config.Image}}' \$CONTAINER_ID) \",
               \"echo \\\"Container image: \$CONTAINER_IMAGE\\\" \",
-              \"if [[ \\\"\$CONTAINER_IMAGE\\\" != *'sha-'* ]]; then \",
-              \"  echo '⚠️  WARNING: Container may not be the latest version!' \",
-              \"fi \",
+              \"case \\\"\$CONTAINER_IMAGE\\\" in *sha-*) echo '✅ Using latest image version' ;; *) echo '⚠️  WARNING: Container may not be the latest version!' ;; esac \",
+              \"echo 'Loading environment variables...' \",
+              \"if [ -f .env ]; then export \$(cat .env | grep -v '^#' | xargs); echo '✅ Environment loaded'; else echo '❌ .env file not found' && exit 1; fi \",
               \"echo 'Testing database connection...' \",
-              \"docker exec \$CONTAINER_ID python manage.py check --database default || exit 1 \",
+              \"docker exec --env DATABASE_URL=\\\"\$DATABASE_URL\\\" --env DJANGO_SECRET_KEY=\\\"\$DJANGO_SECRET_KEY\\\" \$CONTAINER_ID python manage.py check --database default || exit 1 \",
               \"echo '✅ Database connection successful' \",
               \"echo 'Running migrations...' \",
-              \"docker exec \$CONTAINER_ID python manage.py migrate --noinput \",
+              \"docker exec --env DATABASE_URL=\\\"\$DATABASE_URL\\\" --env DJANGO_SECRET_KEY=\\\"\$DJANGO_SECRET_KEY\\\" \$CONTAINER_ID python manage.py migrate --noinput \",
               \"echo 'Collecting static files...' \",
-              \"docker exec \$CONTAINER_ID python manage.py collectstatic --noinput --clear \",
+              \"docker exec --env DATABASE_URL=\\\"\$DATABASE_URL\\\" --env DJANGO_SECRET_KEY=\\\"\$DJANGO_SECRET_KEY\\\" \$CONTAINER_ID python manage.py collectstatic --noinput --clear \",
               \"echo '✅ Migrations completed successfully at $(date)!' \"
             ]" \
             --output text \
@@ -545,7 +545,7 @@ jobs:
             --query 'Reservations[0].Instances[0].PublicIpAddress' \
             --output text)
           
-          echo "### 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "###  Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment**: Production" >> $GITHUB_STEP_SUMMARY
           echo "- **Region**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
@@ -554,9 +554,9 @@ jobs:
           echo "- **Backend Image**: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_STEP_SUMMARY
           echo "- **Frontend Image**: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Migrations**: ✅ Completed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Migrations**:  Completed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔗 Application URLs" >> $GITHUB_STEP_SUMMARY
+          echo "###  Application URLs" >> $GITHUB_STEP_SUMMARY
           echo "- **Frontend**: http://$EC2_IP" >> $GITHUB_STEP_SUMMARY
           echo "- **Backend API**: http://$EC2_IP:8000" >> $GITHUB_STEP_SUMMARY
           echo "- **SSH Access**: \`ssh -i juma-key.pem ubuntu@$EC2_IP\`" >> $GITHUB_STEP_SUMMARY
