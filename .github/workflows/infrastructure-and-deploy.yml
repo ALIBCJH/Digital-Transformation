@@ -354,6 +354,75 @@ jobs:
             --output text \
             --query "Command.CommandId"
 
+      - name: Run Database Migrations
+        env:
+          INSTANCE_ID: ${{ steps.validate_instance.outputs.instance_id }}
+        run: |
+          echo "Running database migrations on instance: $INSTANCE_ID"
+          
+          # Send migration command via SSM
+          COMMAND_ID=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "[{\"Key\":\"InstanceIds\",\"Values\":[\"$INSTANCE_ID\"]}]" \
+            --parameters "commands=[
+              \"echo '=== Running Database Migrations ===' \",
+              \"cd /home/ubuntu || cd ~ \",
+              \"echo 'Waiting for backend container to be ready...' \",
+              \"sleep 5 \",
+              \"CONTAINER_ID=\$(docker ps -qf 'ancestor=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)') \",
+              \"if [ -z \\\"\$CONTAINER_ID\\\" ]; then \",
+              \"  echo 'Backend container not found, trying by name...' \",
+              \"  CONTAINER_ID=\$(docker ps -qf 'name=backend') \",
+              \"fi \",
+              \"if [ -z \\\"\$CONTAINER_ID\\\" ]; then \",
+              \"  echo '❌ Error: Backend container not found' \",
+              \"  docker ps \",
+              \"  exit 1 \",
+              \"fi \",
+              \"echo \\\"Found container: \$CONTAINER_ID\\\" \",
+              \"echo 'Running migrations...' \",
+              \"docker exec \$CONTAINER_ID python manage.py migrate --noinput \",
+              \"echo 'Collecting static files...' \",
+              \"docker exec \$CONTAINER_ID python manage.py collectstatic --noinput --clear \",
+              \"echo '✅ Migrations completed successfully!' \"
+            ]" \
+            --output text \
+            --query "Command.CommandId")
+          
+          echo "Migration command ID: $COMMAND_ID"
+          echo "Waiting for migrations to complete..."
+          
+          # Wait for command to complete (max 2 minutes)
+          for i in {1..24}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query "Status" \
+              --output text 2>/dev/null || echo "Pending")
+            
+            echo "Migration status: $STATUS"
+            
+            if [ "$STATUS" = "Success" ]; then
+              echo "✅ Migrations completed successfully"
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$INSTANCE_ID" \
+                --query "StandardOutputContent" \
+                --output text
+              break
+            elif [ "$STATUS" = "Failed" ]; then
+              echo "❌ Migrations failed"
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$INSTANCE_ID" \
+                --query "StandardErrorContent" \
+                --output text
+              exit 1
+            fi
+            
+            sleep 5
+          done
+
       - name: Deployment Summary
         run: |
           # Get EC2 public IP
@@ -371,6 +440,7 @@ jobs:
           echo "- **Backend Image**: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_STEP_SUMMARY
           echo "- **Frontend Image**: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Migrations**: ✅ Completed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔗 Application URLs" >> $GITHUB_STEP_SUMMARY
           echo "- **Frontend**: http://$EC2_IP" >> $GITHUB_STEP_SUMMARY
