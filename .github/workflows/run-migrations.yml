@@ -1,0 +1,230 @@
+name: Run Database Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      instance_id:
+        description: 'EC2 Instance ID (leave empty to use default from secrets)'
+        required: false
+        type: string
+      migration_app:
+        description: 'Django app to migrate (leave empty for all apps)'
+        required: false
+        type: string
+        default: ''
+      create_superuser:
+        description: 'Create superuser after migration'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write  # Required for OIDC authentication with AWS
+
+env:
+  AWS_REGION: eu-north-1
+
+jobs:
+  run-migrations:
+    name: Execute Database Migrations
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Determine Instance ID
+        id: get_instance
+        run: |
+          if [ -n "${{ inputs.instance_id }}" ]; then
+            echo "instance_id=${{ inputs.instance_id }}" >> $GITHUB_OUTPUT
+            echo "Using provided instance ID: ${{ inputs.instance_id }}"
+          elif [ -n "${{ secrets.EC2_INSTANCE_ID }}" ]; then
+            echo "instance_id=${{ secrets.EC2_INSTANCE_ID }}" >> $GITHUB_OUTPUT
+            echo "Using instance ID from secrets"
+          else
+            echo "::error::No instance ID provided. Either pass it as input or set EC2_INSTANCE_ID secret"
+            exit 1
+          fi
+
+      - name: Check Instance Status
+        run: |
+          INSTANCE_ID="${{ steps.get_instance.outputs.instance_id }}"
+          echo "Checking status of instance: $INSTANCE_ID"
+          
+          STATUS=$(aws ec2 describe-instances \
+            --instance-ids "$INSTANCE_ID" \
+            --query 'Reservations[0].Instances[0].State.Name' \
+            --output text)
+          
+          echo "Instance status: $STATUS"
+          
+          if [ "$STATUS" != "running" ]; then
+            echo "::error::Instance is not running. Current status: $STATUS"
+            exit 1
+          fi
+
+      - name: Run Database Migrations
+        id: migrate
+        env:
+          INSTANCE_ID: ${{ steps.get_instance.outputs.instance_id }}
+          MIGRATION_APP: ${{ inputs.migration_app }}
+        run: |
+          echo "Running database migrations on instance: $INSTANCE_ID"
+          
+          # Build migration command based on input
+          if [ -n "$MIGRATION_APP" ]; then
+            MIGRATE_CMD="python manage.py migrate $MIGRATION_APP --noinput"
+          else
+            MIGRATE_CMD="python manage.py migrate --noinput"
+          fi
+          
+          # Send migration command via SSM
+          COMMAND_ID=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "[{\"Key\":\"InstanceIds\",\"Values\":[\"$INSTANCE_ID\"]}]" \
+            --parameters "commands=[
+              \"echo '=== Database Migration Started ===' \",
+              \"echo 'Timestamp: \$(date)' \",
+              \"cd /home/ubuntu || cd ~ \",
+              \"echo 'Finding backend container...' \",
+              \"CONTAINER_ID=\$(docker ps -qf 'name=backend' | head -n 1) \",
+              \"if [ -z \\\"\$CONTAINER_ID\\\" ]; then \",
+              \"  echo 'Trying alternative container name patterns...' \",
+              \"  CONTAINER_ID=\$(docker ps --format '{{.Names}}' | grep -i 'backend\\|django' | head -n 1) \",
+              \"  if [ -n \\\"\$CONTAINER_ID\\\" ]; then \",
+              \"    CONTAINER_ID=\$(docker ps -qf \\\"name=\$CONTAINER_ID\\\") \",
+              \"  fi \",
+              \"fi \",
+              \"if [ -z \\\"\$CONTAINER_ID\\\" ]; then \",
+              \"  echo '❌ Error: Backend container not found' \",
+              \"  echo 'Available containers:' \",
+              \"  docker ps --format 'table {{.Names}}\\\\t{{.Status}}\\\\t{{.Image}}' \",
+              \"  exit 1 \",
+              \"fi \",
+              \"echo \\\"✅ Found container: \$CONTAINER_ID\\\" \",
+              \"echo 'Checking database connectivity...' \",
+              \"docker exec \$CONTAINER_ID python manage.py check --database default \",
+              \"echo 'Showing migration status...' \",
+              \"docker exec \$CONTAINER_ID python manage.py showmigrations \",
+              \"echo 'Running migrations...' \",
+              \"docker exec \$CONTAINER_ID $MIGRATE_CMD \",
+              \"echo 'Migration completed. Current status:' \",
+              \"docker exec \$CONTAINER_ID python manage.py showmigrations \",
+              \"echo '✅ Database migrations completed successfully!' \"
+            ]" \
+            --comment "Manual migration triggered by ${{ github.actor }}" \
+            --output text \
+            --query "Command.CommandId")
+          
+          echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
+          echo "Migration command ID: $COMMAND_ID"
+
+      - name: Wait for Migration Completion
+        env:
+          INSTANCE_ID: ${{ steps.get_instance.outputs.instance_id }}
+          COMMAND_ID: ${{ steps.migrate.outputs.command_id }}
+        run: |
+          echo "Waiting for migrations to complete..."
+          
+          # Wait for command to complete (max 5 minutes)
+          for i in {1..60}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query "Status" \
+              --output text 2>/dev/null || echo "Pending")
+            
+            echo "[$i/60] Migration status: $STATUS"
+            
+            if [ "$STATUS" = "Success" ]; then
+              echo "✅ Migrations completed successfully"
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### ✅ Migration Success" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Instance**: $INSTANCE_ID" >> $GITHUB_STEP_SUMMARY
+              echo "**Triggered by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+              echo "**Timestamp**: $(date -u)" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "<details><summary>📋 Migration Output</summary>" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$INSTANCE_ID" \
+                --query "StandardOutputContent" \
+                --output text >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "</details>" >> $GITHUB_STEP_SUMMARY
+              break
+            elif [ "$STATUS" = "Failed" ]; then
+              echo "❌ Migrations failed"
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### ❌ Migration Failed" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Instance**: $INSTANCE_ID" >> $GITHUB_STEP_SUMMARY
+              echo "**Triggered by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "<details><summary>📋 Error Output</summary>" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$INSTANCE_ID" \
+                --query "StandardErrorContent" \
+                --output text >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "</details>" >> $GITHUB_STEP_SUMMARY
+              exit 1
+            fi
+            
+            sleep 5
+          done
+
+      - name: Create Superuser (Optional)
+        if: inputs.create_superuser == true
+        env:
+          INSTANCE_ID: ${{ steps.get_instance.outputs.instance_id }}
+        run: |
+          echo "Creating superuser..."
+          
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "[{\"Key\":\"InstanceIds\",\"Values\":[\"$INSTANCE_ID\"]}]" \
+            --parameters "commands=[
+              \"CONTAINER_ID=\$(docker ps -qf 'name=backend' | head -n 1) \",
+              \"echo 'Creating superuser in container: \$CONTAINER_ID' \",
+              \"docker exec -e DJANGO_SUPERUSER_PASSWORD='${{ secrets.DJANGO_SUPERUSER_PASSWORD }}' \$CONTAINER_ID python manage.py createsuperuser --noinput --username admin --email admin@example.com || echo 'Superuser may already exist' \"
+            ]" \
+            --comment "Superuser creation by ${{ github.actor }}" \
+            --output text
+
+      - name: Collect Static Files
+        env:
+          INSTANCE_ID: ${{ steps.get_instance.outputs.instance_id }}
+        run: |
+          echo "Collecting static files..."
+          
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "[{\"Key\":\"InstanceIds\",\"Values\":[\"$INSTANCE_ID\"]}]" \
+            --parameters "commands=[
+              \"CONTAINER_ID=\$(docker ps -qf 'name=backend' | head -n 1) \",
+              \"echo 'Collecting static files in container: \$CONTAINER_ID' \",
+              \"docker exec \$CONTAINER_ID python manage.py collectstatic --noinput --clear \"
+            ]" \
+            --comment "Collectstatic by ${{ github.actor }}" \
+            --output text
+
+      - name: Final Summary
+        if: always()
+        run: |
+          echo "Migration workflow completed"
+          echo "Check the step summaries above for detailed output"
