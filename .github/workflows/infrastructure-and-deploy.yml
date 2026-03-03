@@ -333,39 +333,74 @@ jobs:
             sleep 10
           done
           
+          # Verify docker-compose file exists
+          if [ ! -f docker-compose.prod.yml ]; then
+            echo "❌ Error: docker-compose.prod.yml not found in repository root"
+            exit 1
+          fi
+          
           # Create base64 encoded docker-compose file
           COMPOSE_B64=$(base64 -w 0 docker-compose.prod.yml)
+          if [ -z "$COMPOSE_B64" ]; then
+            echo "❌ Error: Failed to encode docker-compose.prod.yml"
+            exit 1
+          fi
+          echo "✅ Docker compose file encoded successfully"
+          
+          # Create .env file content (safer than export for special characters)
+          ENV_CONTENT="BACKEND_IMAGE=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)
+          FRONTEND_IMAGE=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)
+          DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS }}
+          SECURE_SSL_REDIRECT=False"
+          
+          ENV_B64=$(echo "$ENV_CONTENT" | base64 -w 0)
           
           # Send deployment command and capture command ID
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "[{\"Key\":\"InstanceIds\",\"Values\":[\"$INSTANCE_ID\"]}]" \
             --parameters "commands=[
-              \"echo '=== Starting Deployment ===' \",
+              \"set -e\",
+              \"echo '=== Starting Deployment ($(date)) ===' \",
               \"cd /home/ubuntu || cd ~ \",
+              \"echo 'Current directory:' && pwd \",
               \"echo 'Logging into GitHub Container Registry...' \",
-              \"echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin \",
+              \"echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin 2>&1 | grep -i 'login succeeded' || exit 1 \",
+              \"echo '✅ Docker login successful' \",
               \"echo 'Creating docker-compose file...' \",
               \"echo '${COMPOSE_B64}' | base64 -d > docker-compose.yml \",
-              \"echo 'Setting environment variables...' \",
-              \"export BACKEND_IMAGE=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7) \",
-              \"export FRONTEND_IMAGE=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7) \",
-              \"export DJANGO_SECRET_KEY='${{ secrets.DJANGO_SECRET_KEY }}' \",
-              \"export DATABASE_URL='${{ secrets.DATABASE_URL }}' \",
-              \"export ALLOWED_HOSTS='${{ secrets.ALLOWED_HOSTS }}' \",
-              \"export SECURE_SSL_REDIRECT='False' \",
+              \"if [ ! -s docker-compose.yml ]; then echo '❌ docker-compose.yml is empty'; exit 1; fi \",
+              \"echo '✅ docker-compose.yml created' \",
+              \"echo 'Creating .env file...' \",
+              \"echo '${ENV_B64}' | base64 -d > .env \",
+              \"if [ ! -s .env ]; then echo '❌ .env file is empty'; exit 1; fi \",
+              \"echo '✅ .env file created' \",
+              \"echo 'Verifying Docker Compose version...' \",
+              \"docker compose version || docker-compose version || (echo '❌ Docker Compose not found'; exit 1) \",
               \"echo 'Pulling latest images...' \",
-              \"docker-compose pull \",
+              \"docker compose --env-file .env pull || docker-compose --env-file .env pull \",
               \"echo 'Stopping existing containers...' \",
-              \"docker-compose down || true \",
+              \"docker compose down --remove-orphans || docker-compose down --remove-orphans || echo 'No existing containers to stop' \",
+              \"echo 'Creating app-network if it does not exist...' \",
+              \"docker network create app-network 2>/dev/null || echo 'Network already exists' \",
               \"echo 'Starting new containers...' \",
-              \"docker-compose up -d \",
-              \"echo 'Waiting for containers to be healthy...' \",
-              \"sleep 10 \",
-              \"docker ps \",
+              \"docker compose --env-file .env up -d || docker-compose --env-file .env up -d \",
+              \"echo 'Waiting for containers to start...' \",
+              \"sleep 15 \",
+              \"echo 'Container status:' \",
+              \"docker ps -a \",
+              \"echo 'Verifying backend container is running...' \",
+              \"if ! docker ps --format '{{.Names}}' | grep -q '^backend$'; then \",
+              \"  echo '❌ Backend container not running!' \",
+              \"  docker logs backend 2>&1 || echo 'No logs available' \",
+              \"  exit 1 \",
+              \"fi \",
+              \"echo '✅ Backend container is running' \",
               \"echo 'Cleaning up old images...' \",
-              \"docker image prune -af \",
-              \"echo '✅ Deployment completed successfully!' \"
+              \"docker image prune -af --filter 'until=24h' \",
+              \"echo '✅ Deployment completed successfully at $(date)!' \"
             ]" \
             --output text \
             --query "Command.CommandId")
@@ -418,31 +453,48 @@ jobs:
         run: |
           echo "Running database migrations on instance: $INSTANCE_ID"
           
+          # Calculate the image tag
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)"
+          echo "Looking for container with image: $IMAGE_TAG"
+          
           # Send migration command via SSM
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "[{\"Key\":\"InstanceIds\",\"Values\":[\"$INSTANCE_ID\"]}]" \
             --parameters "commands=[
-              \"echo '=== Running Database Migrations ===' \",
+              \"set -e\",
+              \"echo '=== Running Database Migrations ($(date)) ===' \",
               \"cd /home/ubuntu || cd ~ \",
-              \"echo 'Waiting for backend container to be ready...' \",
-              \"sleep 5 \",
-              \"CONTAINER_ID=\$(docker ps -qf 'ancestor=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)') \",
+              \"echo 'Waiting for backend container to be fully ready...' \",
+              \"sleep 10 \",
+              \"echo 'Searching for backend container with image: ${IMAGE_TAG}' \",
+              \"CONTAINER_ID=\$(docker ps -q --filter 'ancestor=${IMAGE_TAG}' --filter 'status=running') \",
               \"if [ -z \\\"\$CONTAINER_ID\\\" ]; then \",
-              \"  echo 'Backend container not found, trying by name...' \",
-              \"  CONTAINER_ID=\$(docker ps -qf 'name=backend') \",
+              \"  echo 'Container not found by image tag, trying by name...' \",
+              \"  CONTAINER_ID=\$(docker ps -q --filter 'name=^backend$' --filter 'status=running') \",
               \"fi \",
               \"if [ -z \\\"\$CONTAINER_ID\\\" ]; then \",
-              \"  echo '❌ Error: Backend container not found' \",
+              \"  echo '❌ Error: Backend container not found or not running' \",
+              \"  echo 'All running containers:' \",
               \"  docker ps \",
+              \"  echo 'All containers (including stopped):' \",
+              \"  docker ps -a \",
               \"  exit 1 \",
               \"fi \",
-              \"echo \\\"Found container: \$CONTAINER_ID\\\" \",
+              \"echo \\\"✅ Found container: \$CONTAINER_ID\\\" \",
+              \"CONTAINER_IMAGE=\$(docker inspect --format='{{.Config.Image}}' \$CONTAINER_ID) \",
+              \"echo \\\"Container image: \$CONTAINER_IMAGE\\\" \",
+              \"if [[ \\\"\$CONTAINER_IMAGE\\\" != *'sha-'* ]]; then \",
+              \"  echo '⚠️  WARNING: Container may not be the latest version!' \",
+              \"fi \",
+              \"echo 'Testing database connection...' \",
+              \"docker exec \$CONTAINER_ID python manage.py check --database default || exit 1 \",
+              \"echo '✅ Database connection successful' \",
               \"echo 'Running migrations...' \",
               \"docker exec \$CONTAINER_ID python manage.py migrate --noinput \",
               \"echo 'Collecting static files...' \",
               \"docker exec \$CONTAINER_ID python manage.py collectstatic --noinput --clear \",
-              \"echo '✅ Migrations completed successfully!' \"
+              \"echo '✅ Migrations completed successfully at $(date)!' \"
             ]" \
             --output text \
             --query "Command.CommandId")
