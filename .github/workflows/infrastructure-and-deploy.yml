@@ -319,10 +319,25 @@ jobs:
           # Wait for instance to be ready (if just created)
           aws ec2 wait instance-status-ok --instance-ids $INSTANCE_ID || true
           
+          # Check if SSM agent is available
+          echo "Checking SSM agent availability..."
+          for i in {1..12}; do
+            if aws ssm describe-instance-information \
+              --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
+              --query "InstanceInformationList[0].PingStatus" \
+              --output text 2>/dev/null | grep -q "Online"; then
+              echo "✅ SSM agent is online"
+              break
+            fi
+            echo "Waiting for SSM agent... (attempt $i/12)"
+            sleep 10
+          done
+          
           # Create base64 encoded docker-compose file
           COMPOSE_B64=$(base64 -w 0 docker-compose.prod.yml)
           
-          aws ssm send-command \
+          # Send deployment command and capture command ID
+          COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "[{\"Key\":\"InstanceIds\",\"Values\":[\"$INSTANCE_ID\"]}]" \
             --parameters "commands=[
@@ -338,6 +353,7 @@ jobs:
               \"export DJANGO_SECRET_KEY='${{ secrets.DJANGO_SECRET_KEY }}' \",
               \"export DATABASE_URL='${{ secrets.DATABASE_URL }}' \",
               \"export ALLOWED_HOSTS='${{ secrets.ALLOWED_HOSTS }}' \",
+              \"export SECURE_SSL_REDIRECT='False' \",
               \"echo 'Pulling latest images...' \",
               \"docker-compose pull \",
               \"echo 'Stopping existing containers...' \",
@@ -352,7 +368,49 @@ jobs:
               \"echo '✅ Deployment completed successfully!' \"
             ]" \
             --output text \
-            --query "Command.CommandId"
+            --query "Command.CommandId")
+          
+          echo "Deployment command ID: $COMMAND_ID"
+          echo "Waiting for deployment to complete..."
+          
+          # Wait for command to complete (max 5 minutes)
+          for i in {1..60}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query "Status" \
+              --output text 2>/dev/null || echo "Pending")
+            
+            echo "Deployment status: $STATUS (check $i/60)"
+            
+            if [ "$STATUS" = "Success" ]; then
+              echo "✅ Deployment completed successfully"
+              echo "=== Deployment Output ==="
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$INSTANCE_ID" \
+                --query "StandardOutputContent" \
+                --output text
+              break
+            elif [ "$STATUS" = "Failed" ]; then
+              echo "❌ Deployment failed"
+              echo "=== Error Output ==="
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$INSTANCE_ID" \
+                --query "StandardErrorContent" \
+                --output text
+              exit 1
+            fi
+            
+            sleep 5
+          done
+          
+          # Final status check
+          if [ "$STATUS" != "Success" ]; then
+            echo "❌ Deployment timed out or failed. Final status: $STATUS"
+            exit 1
+          fi
 
       - name: Run Database Migrations
         env:
