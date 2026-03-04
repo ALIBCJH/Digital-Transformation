@@ -14,8 +14,9 @@ RUN npm ci --only=production=false
 # Copy source code and environment file
 COPY . .
 
-# Use production environment variables for build
-ENV VITE_API_BASE_URL=/api
+# Allow build-time override of API base URL and provide default
+ARG VITE_API_BASE_URL=/api
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
 # Build the application
 RUN npm run build
