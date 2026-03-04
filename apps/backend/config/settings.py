@@ -5,6 +5,7 @@ Django settings for config project.
 import sys
 from datetime import timedelta
 from pathlib import Path
+import dj_database_url
 
 from decouple import Csv, config
 
@@ -68,17 +69,17 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 # Database Configuration
-# -----------------------------------------------------------------------------
+# ---------------------------------
+
+    # Database Configuration
 DATABASES = {
-    "default": {
-        "ENGINE": config("DB_ENGINE", default="django.db.backends.postgresql"),
-        "NAME": config("DB_NAME", default="DTA"),
-        "USER": config("DB_USER", default="postgres"),
-        "PASSWORD": config("DB_PASSWORD", default=""),
-        "HOST": config("DB_HOST", default="localhost"),
-        "PORT": config("DB_PORT", default="5432"),
-    }
+    'default': dj_database_url.config(
+        default=config('DATABASE_URL', default=''),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
+
 
 # --- FIX: Networking/Length Issues ---
 # If running tests, use local SQLite to avoid RDS network issues
