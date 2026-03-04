@@ -59,6 +59,19 @@ jobs:
         working-directory: ${{ env.TERRAFORM_DIR }}
         run: terraform init
 
+      - name: Import Existing Resources (if needed)
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        continue-on-error: true
+        run: |
+          # Import existing resources that were created locally
+          terraform import aws_s3_bucket.terraform_state juma-terraform-state-storage-2026 || true
+          terraform import aws_dynamodb_table.terraform_locks terraform-state-locking || true
+          terraform import aws_iam_role.ec2_ssm_role juma-ec2-ssm-role-v3 || true
+          terraform import aws_iam_role_policy_attachment.ssm_policy juma-ec2-ssm-role-v3/arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore || true
+          terraform import aws_iam_instance_profile.ssm_profile juma-ssm-instance-profile-v3 || true
+          terraform import aws_key_pair.generated_key juma-stockholm-key-v3 || true
+          terraform import aws_db_subnet_group.db_subnets juma-db-subnet-group-v3 || true
+
       - name: Terraform Validate
         working-directory: ${{ env.TERRAFORM_DIR }}
         run: terraform validate
