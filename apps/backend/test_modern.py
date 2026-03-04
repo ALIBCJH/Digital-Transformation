@@ -150,6 +150,10 @@ class TestMemberEndpoints:
             is_active=True,
         )
 
+        # Ensure the created user has an admin scope so permissions allow access
+        self.user.admin_scope = self.org_node
+        self.user.save()
+
         # Authenticate client
         self.client.force_authenticate(user=self.user)
 
