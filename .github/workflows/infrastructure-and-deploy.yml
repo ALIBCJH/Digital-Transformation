@@ -396,8 +396,8 @@ jobs:
               \"docker network create app-network 2>/dev/null || echo 'Network already exists' \",
               \"echo 'Starting new containers...' \",
               \"\$COMPOSE_CMD --env-file .env up -d \",
-              \"echo 'Waiting for containers to start...' \",
-              \"sleep 15 \",
+              "echo 'Waiting for containers to initialize (45s to align with healthcheck start period)...' ",
+              "sleep 45 ",
               \"echo 'Container status:' \",
               \"docker ps -a \",
               \"echo 'Verifying backend container is running...' \",
@@ -456,76 +456,140 @@ jobs:
             exit 1
           fi
 
-      - name: Run Database Migrations
+      - name: Run Database Migrations (with Retry Logic)
         env:
           INSTANCE_ID: ${{ steps.validate_instance.outputs.instance_id }}
         run: |
-          echo "Running database migrations on instance: $INSTANCE_ID"
+          echo "╔═══════════════════════════════════════════════════════════╗"
+          echo "║       DATABASE MIGRATION - ROBUST EXECUTION               ║"
+          echo "╚═══════════════════════════════════════════════════════════╝"
+          echo "Instance ID: $INSTANCE_ID"
+          echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           
-          # Calculate the image tag
-          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)"
-          echo "Looking for container with image: $IMAGE_TAG"
+          # Read the migration script
+          MIGRATION_SCRIPT=$(cat .github/scripts/run-migrations-robust.sh | base64 -w 0)
           
-          # Send migration command via SSM
-          COMMAND_ID=$(aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --targets "[{\"Key\":\"InstanceIds\",\"Values\":[\"$INSTANCE_ID\"]}]" \
-            --parameters "commands=[
-              \"set -e\",
-              \"cd /home/ubuntu || cd ~ \",
-              \"echo '=== Running Database Migrations ==='\",
-              \"sleep 10\",
-              \"CONTAINER_ID=\$(docker ps -q --filter 'name=backend' --filter 'status=running')\",
-              \"if [ -z \\\"\$CONTAINER_ID\\\" ]; then echo '❌ Backend container not found'; docker ps -a; exit 1; fi\",
-              \"echo \\\"✅ Found container: \$CONTAINER_ID\\\"\",
-              \"echo 'Checking environment...'\",
-              \"docker exec \$CONTAINER_ID env | grep -E 'DATABASE_URL|SECRET_KEY' | head -n 2 || echo '⚠️ Env vars not visible'\",
-              \"echo 'Testing database connection...'\",
-              \"docker exec \$CONTAINER_ID python manage.py check --database default\",
-              \"echo '✅ Database OK'\",
-              \"echo 'Running migrations...'\",
-              \"docker exec \$CONTAINER_ID python manage.py migrate --noinput\",
-              \"echo 'Collecting static files...'\",
-              \"docker exec \$CONTAINER_ID python manage.py collectstatic --noinput --clear\",
-              \"echo '✅ Migrations completed!'\",
-              \"docker ps\"
-            ]" \
-            --output text \
-            --query "Command.CommandId")
-          
-          echo "Migration command ID: $COMMAND_ID"
-          echo "Waiting for migrations to complete..."
-          
-          # Wait for command to complete (max 2 minutes)
-          for i in {1..24}; do
-            STATUS=$(aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "$INSTANCE_ID" \
-              --query "Status" \
-              --output text 2>/dev/null || echo "Pending")
+          # Function to run migrations with comprehensive checks
+          run_migration_attempt() {
+            local attempt=$1
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🔄 Migration Attempt $attempt of 3"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             
-            echo "Migration status: $STATUS"
+            COMMAND_ID=$(aws ssm send-command \
+              --document-name "AWS-RunShellScript" \
+              --targets "[{\"Key\":\"InstanceIds\",\"Values\":[\"$INSTANCE_ID\"]}]" \
+              --timeout-seconds 300 \
+              --parameters "commands=[
+                \"cd /home/ubuntu || cd ~ \",
+                \"echo '$MIGRATION_SCRIPT' | base64 -d > migrate-run.sh\",
+                \"chmod +x migrate-run.sh\",
+                \"./migrate-run.sh\"
+              ]" \
+              --comment "Migration attempt $attempt - triggered by ${{ github.actor }}" \
+              --output text \
+              --query "Command.CommandId")
             
-            if [ "$STATUS" = "Success" ]; then
-              echo "✅ Migrations completed successfully"
-              aws ssm get-command-invocation \
+            echo "📝 SSM Command ID: $COMMAND_ID"
+            echo "⏳ Waiting for migration to complete (timeout: 5 minutes)..."
+            echo ""
+            
+            # Wait for command to complete (max 5 minutes = 60 checks)
+            for i in {1..60}; do
+              STATUS=$(aws ssm get-command-invocation \
                 --command-id "$COMMAND_ID" \
                 --instance-id "$INSTANCE_ID" \
-                --query "StandardOutputContent" \
-                --output text
+                --query "Status" \
+                --output text 2>/dev/null || echo "Pending")
+              
+              # Show progress every 10 seconds
+              if [ $((i % 2)) -eq 0 ]; then
+                echo "[$(date +%H:%M:%S)] Status: $STATUS (check $i/60)"
+              fi
+              
+              if [ "$STATUS" = "Success" ]; then
+                echo ""
+                echo "✅ Migration attempt $attempt SUCCEEDED"
+                echo ""
+                echo "━━━━━━━━━━━━━━ MIGRATION OUTPUT ━━━━━━━━━━━━━━"
+                aws ssm get-command-invocation \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query "StandardOutputContent" \
+                  --output text
+                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                return 0
+              elif [ "$STATUS" = "Failed" ]; then
+                echo ""
+                echo "❌ Migration attempt $attempt FAILED"
+                echo ""
+                echo "━━━━━━━━━━━━━━ ERROR OUTPUT ━━━━━━━━━━━━━━━━"
+                aws ssm get-command-invocation \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query "StandardOutputContent" \
+                  --output text
+                echo ""
+                echo "━━━━━━━━━━━━━━ STDERR OUTPUT ━━━━━━━━━━━━━━━"
+                aws ssm get-command-invocation \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query "StandardErrorContent" \
+                  --output text
+                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                return 1
+              elif [ "$STATUS" = "TimedOut" ] || [ "$STATUS" = "Cancelled" ]; then
+                echo ""
+                echo "⚠️  Migration attempt $attempt $STATUS"
+                return 1
+              fi
+              
+              sleep 5
+            done
+            
+            echo ""
+            echo "⏱️  Migration attempt $attempt TIMED OUT (exceeded 5 minutes)"
+            echo "Final status: $STATUS"
+            return 1
+          }
+          
+          # Main retry loop: Try up to 3 times with exponential backoff
+          MIGRATION_SUCCESS=false
+          for attempt in 1 2 3; do
+            if run_migration_attempt $attempt; then
+              MIGRATION_SUCCESS=true
+              echo ""
+              echo "╔═══════════════════════════════════════════════════════════╗"
+              echo "║   ✅ MIGRATION COMPLETED SUCCESSFULLY (Attempt $attempt)      ║"
+              echo "╚═══════════════════════════════════════════════════════════╝"
               break
-            elif [ "$STATUS" = "Failed" ]; then
-              echo "❌ Migrations failed"
-              aws ssm get-command-invocation \
-                --command-id "$COMMAND_ID" \
-                --instance-id "$INSTANCE_ID" \
-                --query "StandardErrorContent" \
-                --output text
-              exit 1
+            else
+              if [ $attempt -lt 3 ]; then
+                BACKOFF_TIME=$((15 * attempt))
+                echo ""
+                echo "⏳ Waiting ${BACKOFF_TIME}s before retry attempt $((attempt + 1))..."
+                sleep $BACKOFF_TIME
+              fi
             fi
-            
-            sleep 5
           done
+          
+          # Final check
+          if [ "$MIGRATION_SUCCESS" != "true" ]; then
+            echo ""
+            echo "╔═══════════════════════════════════════════════════════════╗"
+            echo "║   ❌ MIGRATION FAILED AFTER 3 ATTEMPTS                    ║"
+            echo "╚═══════════════════════════════════════════════════════════╝"
+            echo ""
+            echo "🔧 Troubleshooting suggestions:"
+            echo "  1. Check EC2 instance logs in CloudWatch"
+            echo "  2. Verify RDS security group allows EC2 connections"
+            echo "  3. Verify DATABASE_URL and DB credentials are correct"
+            echo "  4. Check container logs: docker logs backend"
+            echo "  5. Manually run: ./migrate.sh --check"
+            echo ""
+            exit 1
+          fi
 
       - name: Deployment Summary
         run: |
