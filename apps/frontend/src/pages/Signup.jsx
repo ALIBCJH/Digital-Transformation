@@ -172,13 +172,13 @@ const Signup = () => {
                   value={formData.altar}
                   onChange={handleChange}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 transition-all"
-                  placeholder="Enter altar name (e.g., Nyeri Main Altar)"
+                  placeholder="e.g., Nairobi Central Church, Mombasa Fellowship..."
                   disabled={loadingAltars}
                 />
               )}
               {!loadingAltars && altars.length === 0 && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Please enter the exact altar name as registered in the system
+                <p className="text-xs text-blue-600 mt-2 bg-blue-50 p-2 rounded border border-blue-200">
+                  ✨ Enter the name of your altar - it will be created automatically if it doesn't exist yet!
                 </p>
               )}
             </div>

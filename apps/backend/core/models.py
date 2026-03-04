@@ -188,8 +188,14 @@ class Altar(models.Model):
     name = models.CharField(max_length=255)
 
     # Link to parent node (typically a Sub-Region)
+    # NULL allowed for bootstrap/standalone altars - users can attach later
     parent_node = models.ForeignKey(
-        OrganizationNode, on_delete=models.CASCADE, related_name="altars", db_index=True
+        OrganizationNode,
+        on_delete=models.CASCADE,
+        related_name="altars",
+        db_index=True,
+        null=True,
+        blank=True,
     )
 
     # Location details
@@ -231,11 +237,15 @@ class Altar(models.Model):
         ordering = ["name"]
 
     def __str__(self):
-        return f"{self.name} ({self.parent_node.name})"
+        if self.parent_node:
+            return f"{self.name} ({self.parent_node.name})"
+        return f"{self.name} (Standalone)"
 
     def get_organizational_path(self):
         """Get full organizational path including altar"""
-        return f"{self.parent_node.path}{self.code}/"
+        if self.parent_node:
+            return f"{self.parent_node.path}{self.code}/"
+        return f"/{self.code}/"  # Root-level altar
 
 
 # ============================================

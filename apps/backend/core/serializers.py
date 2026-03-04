@@ -46,14 +46,18 @@ class RegisterSerializer(serializers.ModelSerializer):
             return {"type": "phone", "value": value}
 
     def validate_altar(self, value):
-        """Look up the altar by name"""
+        """
+        Look up or prepare altar name for creation.
+        CHANGED: Instead of rejecting unknown altars, we now accept them
+        and create them on-the-fly during user creation.
+        """
+        # Try to find existing altar
         try:
             altar = Altar.objects.get(name=value, is_active=True)
-            return altar
-        except Altar.DoesNotExist as err:
-            raise serializers.ValidationError(
-                f"Altar '{value}' does not exist. Please provide a valid altar name."
-            ) from err
+            return {"exists": True, "altar": altar, "name": value}
+        except Altar.DoesNotExist:
+            # NEW: Allow new altar names - they'll be created in create()
+            return {"exists": False, "altar": None, "name": value}
 
     def validate(self, attrs):
         if attrs["password"] != attrs["password2"]:
@@ -70,7 +74,47 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop("password2")
         email_or_phone = validated_data.pop("email_or_phone")
-        altar = validated_data.pop("altar")
+        altar_data = validated_data.pop("altar")
+
+        # ====================================================================
+        # BOOTSTRAP LOGIC: Create altar if it doesn't exist
+        # ====================================================================
+        if altar_data["exists"]:
+            # Altar already exists
+            altar = altar_data["altar"]
+        else:
+            # NEW: Create a new altar with a default parent structure
+            import re
+
+            altar_name = altar_data["name"]
+            # Generate a code from the altar name (e.g., "Nyeri Main" -> "NYERI_MAIN")
+            altar_code = re.sub(r'[^a-zA-Z0-9]+', '_', altar_name).upper().strip('_')
+
+            # Ensure code uniqueness
+            base_code = altar_code
+            counter = 1
+            while Altar.objects.filter(code=altar_code).exists():
+                altar_code = f"{base_code}_{counter}"
+                counter += 1
+
+            # Get or create a default parent OrganizationNode
+            # This ensures the user can bootstrap their own hierarchy
+            root_node, created = OrganizationNode.objects.get_or_create(
+                code="GLOBAL",
+                defaults={
+                    "name": "Global Root",
+                    "depth": 0,
+                    "path": "/GLOBAL/",
+                    "is_active": True,
+                }
+            )
+            # Create the altar (parent_node is now optional, but we provide one for structure)
+            altar = Altar.objects.create(
+                name=altar_name,
+                code=altar_code,
+                parent_node=root_node,  # Can be None if you want true standalone
+                is_active=True,
+            )
 
         # Generate username
         first_name = validated_data["first_name"].lower()
