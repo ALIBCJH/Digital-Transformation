@@ -7,7 +7,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = "juma-infra-terraform-states"
+    bucket         = "juma-terraform-state-storage-2026"
     key            = "digital-transformation/terraform.tfstate"
     region         = "eu-north-1"
     dynamodb_table = "terraform-state-locking"
