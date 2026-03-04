@@ -5,8 +5,8 @@ Django settings for config project.
 import sys
 from datetime import timedelta
 from pathlib import Path
-import dj_database_url
 
+import dj_database_url
 from decouple import Csv, config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
