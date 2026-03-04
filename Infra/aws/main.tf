@@ -1,7 +1,3 @@
-provider "aws" {
-  region = "eu-north-1" # Stockholm
-}
-
 # --- FETCH YOUR CURRENT IP ADDRESS ---
 data "http" "my_ip" {
   url = "http://ipv4.icanhazip.com"
@@ -36,14 +32,6 @@ resource "aws_internet_gateway" "gw" {
   tags   = { Name = "juma-gateway" }
 }
 
-resource "aws_route_table" "public_rt" {
-  vpc_id = aws_vpc.main.id
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.gw.id
-  }
-}
-
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
@@ -58,6 +46,14 @@ resource "aws_subnet" "public_b" {
   map_public_ip_on_launch = true
 }
 
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.gw.id
+  }
+}
+
 resource "aws_route_table_association" "a" {
   subnet_id      = aws_subnet.public.id
   route_table_id = aws_route_table.public_rt.id
@@ -68,10 +64,28 @@ resource "aws_route_table_association" "b" {
   route_table_id = aws_route_table.public_rt.id
 }
 
-# --- RDS SUBNET GROUP ---
-resource "aws_db_subnet_group" "db_subnets" {
-  name       = "juma-db-subnet-group-v3"
-  subnet_ids = [aws_subnet.public.id, aws_subnet.public_b.id]
+# --- IAM ROLE FOR SSM (The Automation Bridge) ---
+resource "aws_iam_role" "ec2_ssm_role" {
+  name = "juma-ec2-ssm-role-v3"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ssm_policy" {
+  role       = aws_iam_role.ec2_ssm_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "ssm_profile" {
+  name = "juma-ssm-instance-profile-v3"
+  role = aws_iam_role.ec2_ssm_role.name
 }
 
 # --- SECURITY GROUPS ---
@@ -79,7 +93,7 @@ resource "aws_security_group" "allow_ssh_pg" {
   name   = "allow_ssh_and_postgres_v3"
   vpc_id = aws_vpc.main.id
 
-  # 1. SSH Access: Only allowed from your detected IP
+  # SSH - current IP (will ignore changes to prevent constant recreation)
   ingress {
     from_port   = 22
     to_port     = 22
@@ -87,7 +101,7 @@ resource "aws_security_group" "allow_ssh_pg" {
     cidr_blocks = ["${chomp(data.http.my_ip.response_body)}/32"]
   }
 
-  # 2. HTTP Access: Public access for frontend
+  # HTTP
   ingress {
     from_port   = 80
     to_port     = 80
@@ -95,7 +109,7 @@ resource "aws_security_group" "allow_ssh_pg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # 3. HTTPS Access: Public access for frontend (SSL)
+  # HTTPS
   ingress {
     from_port   = 443
     to_port     = 443
@@ -103,20 +117,12 @@ resource "aws_security_group" "allow_ssh_pg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # 4. Backend API: Public access for API endpoints
+  # Backend API
   ingress {
     from_port   = 8000
     to_port     = 8000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # 5. Database Access: Only allowed from within the VPC network
-  ingress {
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main.cidr_block] # 10.0.0.0/16
   }
 
   egress {
@@ -126,18 +132,33 @@ resource "aws_security_group" "allow_ssh_pg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = { Name = "juma-web-security-group" }
+  lifecycle {
+    ignore_changes = [ingress]
+  }
+}
+
+# RDS Security Group: Only allows traffic from the Web Security Group
+resource "aws_security_group" "rds_sg" {
+  name   = "postgres-rds-sg"
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.allow_ssh_pg.id]
+  }
 }
 
 # --- COMPUTE (EC2) ---
 resource "aws_instance" "web" {
   ami                    = "ami-08eb150f611ca277f"
-  instance_type          = "t3.small" # Upgraded for running both frontend and backend
+  instance_type          = "t3.small"
   key_name               = aws_key_pair.generated_key.key_name
   vpc_security_group_ids = [aws_security_group.allow_ssh_pg.id]
   subnet_id              = aws_subnet.public.id
+  iam_instance_profile   = aws_iam_instance_profile.ssm_profile.name
 
-  # User data script to install Docker and Docker Compose
   user_data = <<-EOF
               #!/bin/bash
               set -e
@@ -146,30 +167,38 @@ resource "aws_instance" "web" {
               apt-get update
               apt-get upgrade -y
               
-              # Install Docker
+              # Install Docker (official method)
               curl -fsSL https://get.docker.com -o get-docker.sh
               sh get-docker.sh
               usermod -aG docker ubuntu
+              systemctl enable docker
               
               # Install Docker Compose
               curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
               chmod +x /usr/local/bin/docker-compose
               
-              # Install SSM agent (if not present)
+              # Install SSM agent
               snap install amazon-ssm-agent --classic
               systemctl enable snap.amazon-ssm-agent.amazon-ssm-agent.service
               systemctl start snap.amazon-ssm-agent.amazon-ssm-agent.service
               
-              # Create docker network for frontend-backend communication
+              # Create docker network
               docker network create app-network || true
               
               echo "Setup complete" > /var/log/user-data-complete.log
               EOF
 
+  depends_on = [aws_iam_role_policy_attachment.ssm_policy]
+  
   tags = { Name = "Juma-Production-Server" }
 }
 
 # --- DATABASE (RDS) ---
+resource "aws_db_subnet_group" "db_subnets" {
+  name       = "juma-db-subnet-group-v3"
+  subnet_ids = [aws_subnet.public.id, aws_subnet.public_b.id]
+}
+
 resource "aws_db_instance" "postgres" {
   allocated_storage      = 20
   engine                 = "postgres"
@@ -179,38 +208,8 @@ resource "aws_db_instance" "postgres" {
   username               = "simonadmin"
   password               = var.db_password
   db_subnet_group_name   = aws_db_subnet_group.db_subnets.name
-  vpc_security_group_ids = [aws_security_group.allow_ssh_pg.id]
-  
-  # --- PROTECTED FROM INTERNET ---
+  vpc_security_group_ids = [aws_security_group.rds_sg.id]
   publicly_accessible    = false 
   skip_final_snapshot    = true
 }
 
-# --- OUTPUTS ---
-output "ssh_command" {
-  value = "ssh -i juma-key.pem ubuntu@${aws_instance.web.public_ip}"
-}
-
-output "ec2_instance_id" {
-  description = "EC2 Instance ID for deployment"
-  value       = aws_instance.web.id
-}
-
-output "ec2_public_ip" {
-  description = "Public IP of EC2 instance"
-  value       = aws_instance.web.public_ip
-}
-
-output "frontend_url" {
-  description = "Frontend application URL"
-  value       = "http://${aws_instance.web.public_ip}"
-}
-
-output "backend_url" {
-  description = "Backend API URL"
-  value       = "http://${aws_instance.web.public_ip}:8000"
-}
-
-output "rds_endpoint" {
-  value = aws_db_instance.postgres.endpoint
-}

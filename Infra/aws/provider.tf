@@ -14,3 +14,7 @@ terraform {
     encrypt        = true
   }
 }
+
+provider "aws" {
+  region = "eu-north-1"  # Keep eu-north-1 since your resources are already there
+}
