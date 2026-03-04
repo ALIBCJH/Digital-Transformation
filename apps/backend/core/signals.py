@@ -1,9 +1,9 @@
 """
 Signals for automatic bootstrap and data integrity
 """
+from django.apps import apps
 from django.db.models.signals import post_migrate
 from django.dispatch import receiver
-from django.apps import apps
 
 
 @receiver(post_migrate)
@@ -11,7 +11,7 @@ def create_default_organization_structure(sender, **kwargs):
     """
     Post-migrate signal to optionally create a default root organization node.
     This ensures the app has a minimal viable structure on first deploy.
-    
+
     NOTE: This creates a "fallback" structure only if NO OrganizationNodes exist.
     Users can create their own custom structures through signup.
     """
@@ -20,7 +20,7 @@ def create_default_organization_structure(sender, **kwargs):
 
     # Import models here to avoid circular imports
     OrganizationNode = apps.get_model('core', 'OrganizationNode')
-    
+
     # Only create if absolutely no nodes exist
     if OrganizationNode.objects.count() == 0:
         print("\n🏗️  Creating default root organization node...")

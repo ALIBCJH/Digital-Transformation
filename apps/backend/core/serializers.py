@@ -85,11 +85,11 @@ class RegisterSerializer(serializers.ModelSerializer):
         else:
             # NEW: Create a new altar with a default parent structure
             import re
-            
+
             altar_name = altar_data["name"]
             # Generate a code from the altar name (e.g., "Nyeri Main" -> "NYERI_MAIN")
             altar_code = re.sub(r'[^a-zA-Z0-9]+', '_', altar_name).upper().strip('_')
-            
+
             # Ensure code uniqueness
             base_code = altar_code
             counter = 1
@@ -108,7 +108,6 @@ class RegisterSerializer(serializers.ModelSerializer):
                     "is_active": True,
                 }
             )
-            
             # Create the altar (parent_node is now optional, but we provide one for structure)
             altar = Altar.objects.create(
                 name=altar_name,
