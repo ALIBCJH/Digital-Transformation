@@ -109,12 +109,25 @@ const AdminDashboard = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      await memberService.create(memberForm);
+      // Combine first_name and last_name into full_name for Django backend
+      const payload = {
+        ...memberForm,
+        full_name: `${memberForm.first_name} ${memberForm.last_name}`.trim()
+      };
+      
+      // Remove the separate first_name and last_name fields
+      delete payload.first_name;
+      delete payload.last_name;
+      
+      console.log('Sending member payload:', payload);
+      await memberService.create(payload);
       alert('Member registered successfully!');
       closeModal();
       loadData();
     } catch (error) {
-      alert(error.message || 'Failed to register member');
+      console.error('Member registration error:', error);
+      const errorMsg = error.response?.data?.full_name?.[0] || error.response?.data?.error || error.message || 'Failed to register member';
+      alert(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -124,11 +137,23 @@ const AdminDashboard = () => {
     e.preventDefault();
     setLoading(true);
     try {
+      // Combine first_name and last_name into full_name for Django backend
+      const payload = {
+        ...guestForm,
+        full_name: `${guestForm.first_name} ${guestForm.last_name}`.trim()
+      };
+      
+      // Remove the separate first_name and last_name fields
+      delete payload.first_name;
+      delete payload.last_name;
+      
+      console.log('Sending guest payload:', payload);
       // TODO: Implement guest service
-      console.log('Guest registered:', guestForm);
+      console.log('Guest registered:', payload);
       alert('Guest registered successfully!');
       closeModal();
     } catch (error) {
+      console.error('Guest registration error:', error);
       alert(error.message || 'Failed to register guest');
     } finally {
       setLoading(false);
