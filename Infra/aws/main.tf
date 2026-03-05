@@ -195,7 +195,7 @@ resource "aws_instance" "web" {
 
 # --- DATABASE (RDS) ---
 resource "aws_db_subnet_group" "db_subnets" {
-  name       = "juma-db-subnet-group-v3"
+  name       = "juma-db-subnet-group-v4"
   subnet_ids = [aws_subnet.public.id, aws_subnet.public_b.id]
 }
 
