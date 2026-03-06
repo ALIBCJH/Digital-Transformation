@@ -1,5 +1,6 @@
 from django.contrib import admin
-from django.db.models import Count, Q, Sum
+
+# Removed unused imports
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
@@ -93,7 +94,7 @@ class OrganizationNodeAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
     search_fields = ["name", "code", "path"]
     raw_id_fields = ["parent", "current_leader"]
     readonly_fields = ["path", "depth", "hierarchy_view"]
-    
+
     fieldsets = (
         ("Basic Information", {
             "fields": ("name", "code", "parent", "is_active")
@@ -149,20 +150,20 @@ class AltarAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
         "member_count",
         "status_badge",
     ]
-    
+
     # CRITICAL: Regional filtering for master view
     list_filter = [
         "is_active",
         "parent_node",  # Filter by organizational node (Region/Sub-Region)
         "city",
     ]
-    
+
     # CRITICAL: Global search across all altars
     search_fields = ["name", "code", "city", "parent_node__name", "parent_node__path"]
-    
+
     raw_id_fields = ["parent_node", "pastor"]
     readonly_fields = ["organizational_path_display", "member_count", "created_at", "updated_at"]
-    
+
     fieldsets = (
         ("Basic Information", {
             "fields": ("name", "code", "parent_node", "is_active")
@@ -230,7 +231,7 @@ class UserAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
         "role_badge",
         "status",
     ]
-    
+
     list_filter = [
         "is_active",
         "is_staff",
@@ -238,7 +239,7 @@ class UserAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
         "phone_verified",
         "home_altar__parent_node",  # Regional filter
     ]
-    
+
     search_fields = [
         "username",
         "email",
@@ -248,10 +249,10 @@ class UserAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
         "home_altar__name",
         "admin_scope__name",
     ]
-    
+
     raw_id_fields = ["home_altar", "admin_scope"]
     readonly_fields = ["created_at", "updated_at", "last_login", "date_joined"]
-    
+
     fieldsets = (
         ("Authentication", {
             "fields": ("username", "email", "password")
@@ -320,7 +321,7 @@ class MemberAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
         "membership_date",
         "status_badge",
     ]
-    
+
     # CRITICAL: Regional categorization for master view
     list_filter = [
         "is_active",
@@ -329,7 +330,7 @@ class MemberAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
         "gender",
         "membership_date",
     ]
-    
+
     # CRITICAL: Global search - find any member in the country
     search_fields = [
         "full_name",
@@ -339,11 +340,11 @@ class MemberAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
         "home_altar__parent_node__name",
         "home_altar__parent_node__path",
     ]
-    
+
     raw_id_fields = ["home_altar"]
     readonly_fields = ["created_at", "updated_at", "attendance_summary"]
     date_hierarchy = "membership_date"
-    
+
     fieldsets = (
         ("Personal Information", {
             "fields": ("full_name", "phone_number", "email", "gender", "date_of_birth")
@@ -400,17 +401,17 @@ class MemberAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
         total_attendance = AttendanceLog.objects.filter(member=obj).count()
         if total_attendance == 0:
             return "No attendance records"
-        
+
         recent_attendance = AttendanceLog.objects.filter(
             member=obj
         ).order_by("-service_date")[:5]
-        
+
         summary = f"<strong>Total Services Attended:</strong> {total_attendance}<br><br>"
         summary += "<strong>Recent Attendance:</strong><ul>"
-        
+
         for log in recent_attendance:
             summary += f"<li>{log.service_date} - {log.get_service_type_display()}</li>"
-        
+
         summary += "</ul>"
         return mark_safe(summary)
 
@@ -436,21 +437,21 @@ class AttendanceLogAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
         "service_type",
         "timestamp",
     ]
-    
+
     list_filter = [
         "service_type",
         "service_date",
         "altar__parent_node",  # Regional filter
         "altar",
     ]
-    
+
     search_fields = [
         "member__full_name",
         "guest__full_name",
         "altar__name",
         "altar__parent_node__name",
     ]
-    
+
     raw_id_fields = ["member", "guest", "altar"]
     date_hierarchy = "service_date"
     readonly_fields = ["timestamp"]
@@ -482,7 +483,7 @@ class AttendanceLogAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
 @admin.register(Guest)
 class GuestAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
     """Track visitors and guests"""
-    
+
     list_display = ["full_name", "phone_number", "visited_altar", "visit_count", "last_visit_date"]
     list_filter = ["visited_altar__parent_node", "visited_altar", "first_visit_date"]
     search_fields = ["full_name", "phone_number", "visited_altar__name", "visiting_from"]
@@ -493,7 +494,7 @@ class GuestAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
 @admin.register(MemberTransferHistory)
 class MemberTransferHistoryAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
     """Track member transfers between altars"""
-    
+
     list_display = ["member", "from_altar", "to_altar", "transfer_reason", "transfer_date", "processed_by"]
     list_filter = [
         "transfer_reason",

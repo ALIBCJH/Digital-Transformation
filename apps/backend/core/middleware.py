@@ -5,8 +5,6 @@ Enforces that only the 3 authorized super admins can access the admin site.
 
 from django.contrib import messages
 from django.http import HttpResponseForbidden
-from django.shortcuts import redirect
-from django.urls import reverse
 
 # Hardcoded list of authorized super admin emails (must match admin.py)
 ALLOWED_SUPERADMIN_EMAILS = [
@@ -19,10 +17,10 @@ ALLOWED_SUPERADMIN_EMAILS = [
 class SuperAdminAccessMiddleware:
     """
     Middleware to restrict Django Admin access to only authorized super admins.
-    
+
     This middleware checks every request to the /admin/ path and ensures only
     users with emails in the ALLOWED_SUPERADMIN_EMAILS list can proceed.
-    
+
     All other users (including regular staff) are blocked with a 403 Forbidden.
     """
 
@@ -35,12 +33,12 @@ class SuperAdminAccessMiddleware:
             # Allow login page and logout
             if request.path in ['/admin/login/', '/admin/logout/']:
                 return self.get_response(request)
-            
+
             # Check if user is authenticated
             if not request.user.is_authenticated:
                 # Let Django's auth redirect to login
                 return self.get_response(request)
-            
+
             # Check if user is in the allowed list
             if request.user.email not in ALLOWED_SUPERADMIN_EMAILS:
                 # Block access with a clear message
@@ -49,7 +47,7 @@ class SuperAdminAccessMiddleware:
                     "🚫 Access Denied: You are not authorized to access the Django Admin. "
                     "Only designated Super Administrators can access this area."
                 )
-                
+
                 # Return 403 Forbidden
                 return HttpResponseForbidden(
                     """
@@ -130,7 +128,7 @@ class SuperAdminAccessMiddleware:
                     </html>
                     """
                 )
-        
+
         # Process the request normally
         response = self.get_response(request)
         return response

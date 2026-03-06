@@ -42,22 +42,22 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         skip_existing = options['skip_existing']
-        
+
         self.stdout.write(self.style.WARNING(
             "\n" + "=" * 70 + "\n"
             "SUPER ADMIN SETUP\n"
             "=" * 70 + "\n"
         ))
-        
+
         created_count = 0
         updated_count = 0
         skipped_count = 0
-        
+
         with transaction.atomic():
             for email in ALLOWED_SUPERADMIN_EMAILS:
                 # Generate username from email
                 username = email.split('@')[0]
-                
+
                 # Check if user exists
                 user, created = User.objects.get_or_create(
                     email=email,
@@ -70,13 +70,13 @@ class Command(BaseCommand):
                         'last_name': 'Admin',
                     }
                 )
-                
+
                 if created:
                     # Set password for new user
                     password = DEFAULT_PASSWORDS.get(email, 'ChangeMe2026!')
                     user.set_password(password)
                     user.save()
-                    
+
                     self.stdout.write(self.style.SUCCESS(
                         f"✅ Created: {email}\n"
                         f"   Username: {username}\n"
@@ -84,7 +84,7 @@ class Command(BaseCommand):
                         f"   ⚠️  IMPORTANT: Change this password immediately after first login!\n"
                     ))
                     created_count += 1
-                    
+
                 else:
                     if skip_existing:
                         self.stdout.write(self.style.WARNING(
@@ -97,34 +97,34 @@ class Command(BaseCommand):
                         user.is_staff = True
                         user.is_active = True
                         user.save()
-                        
+
                         self.stdout.write(self.style.SUCCESS(
                             f"🔄 Updated: {email}\n"
                             f"   Ensured: is_superuser=True, is_staff=True, is_active=True\n"
                         ))
                         updated_count += 1
-        
+
         # Summary
         self.stdout.write(self.style.WARNING(
             "\n" + "=" * 70 + "\n"
             "SUMMARY\n"
             "=" * 70 + "\n"
         ))
-        
+
         self.stdout.write(
             f"✅ Created: {created_count}\n"
             f"🔄 Updated: {updated_count}\n"
             f"⏭️  Skipped: {skipped_count}\n"
             f"📊 Total authorized: {len(ALLOWED_SUPERADMIN_EMAILS)}\n"
         )
-        
+
         if created_count > 0:
             self.stdout.write(self.style.WARNING(
                 "\n⚠️  SECURITY REMINDER:\n"
                 "All new accounts have default passwords shown above.\n"
                 "These MUST be changed immediately after first login!\n"
             ))
-        
+
         self.stdout.write(self.style.SUCCESS(
             "\n✅ Super Admin setup completed successfully!\n"
             "\nThese accounts can now access the Django Admin at /admin/\n"
