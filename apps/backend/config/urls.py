@@ -16,10 +16,13 @@ from core.views import (
     RegisterView,
     SuperAdminDashboardView,
     SuperAdminRegisterView,
+    health_check,
 )
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # Health check endpoint
+    path("api/health/", health_check, name="health_check"),
     # Authentication endpoints
     path(
         "api/register/", RegisterView.as_view(), name="register"
