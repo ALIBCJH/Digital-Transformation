@@ -891,13 +891,13 @@ class BulkAttendanceView(APIView):
         # Get the organizational hierarchy for the altar
         altar_node = altar.organization_node
         hierarchy = altar_node.get_ancestors(include_self=False)
-        
+
         # Map hierarchy by depth
         sub_region = None
         region = None
         country = None
         continent = None
-        
+
         for node in hierarchy:
             if node.depth == 2:  # Sub-region
                 sub_region = node
@@ -924,7 +924,7 @@ class BulkAttendanceView(APIView):
             for record in attendance_records:
                 member_id = record["member_id"]
                 is_present = record["is_present"]
-                
+
                 # Only create records for members marked as present
                 if is_present:
                     try:

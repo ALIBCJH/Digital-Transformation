@@ -6,8 +6,9 @@ Test script to verify:
 3. Attendance recording functionality
 """
 
-import requests
 from datetime import date
+
+import requests
 
 BASE_URL = "http://localhost:8000"
 
@@ -36,7 +37,7 @@ def test_registration_and_attendance():
 
     if response1.status_code == 201:
         data1 = response1.json()
-        print(f"✅ First admin registered successfully!")
+        print("✅ First admin registered successfully!")
         print(f"   Name: {data1['user']['first_name']} {data1['user']['last_name']}")
         print(f"   Altar: {data1['user']['home_altar']}")
         print(f"   Scope: {data1['user']['scope_name']}")
@@ -65,10 +66,10 @@ def test_registration_and_attendance():
 
     if response2.status_code == 400:
         error_data = response2.json()
-        print(f"✅ Second admin BLOCKED as expected!")
+        print("✅ Second admin BLOCKED as expected!")
         print(f"   Error: {error_data.get('altar', ['N/A'])[0]}")
     else:
-        print(f"❌ SECURITY ISSUE: Second admin was allowed to register!")
+        print("❌ SECURITY ISSUE: Second admin was allowed to register!")
         print(response2.text)
         return
 
@@ -91,10 +92,9 @@ def test_registration_and_attendance():
 
     if response3.status_code == 201:
         data3 = response3.json()
-        print(f"✅ Third admin registered successfully!")
+        print("✅ Third admin registered successfully!")
         print(f"   Name: {data3['user']['first_name']} {data3['user']['last_name']}")
         print(f"   Altar: {data3['user']['home_altar']}")
-        token3 = data3['access']
     else:
         print(f"❌ Registration failed: {response3.status_code}")
         print(response3.text)
@@ -103,7 +103,7 @@ def test_registration_and_attendance():
     # Test 4: Get members list for first admin
     print("\n4. Getting members list for first admin (Nyeri Main Altar)...")
     headers1 = {"Authorization": f"Bearer {token1}"}
-    
+
     members_response = requests.get(
         f"{BASE_URL}/api/members/list/",
         headers=headers1,
@@ -118,7 +118,7 @@ def test_registration_and_attendance():
 
     # Test 5: Test attendance recording (if members exist)
     print("\n5. Testing attendance recording endpoint...")
-    
+
     # First, let's create a test member
     print("   Creating a test member...")
     member_data = {
@@ -127,21 +127,21 @@ def test_registration_and_attendance():
         "gender": "M",
         "home_altar": "Nyeri Main Altar"
     }
-    
+
     create_member_response = requests.post(
         f"{BASE_URL}/api/members/create/",
         headers=headers1,
         json=member_data,
         timeout=10
     )
-    
+
     if create_member_response.status_code == 201:
         member = create_member_response.json()
         print(f"   ✅ Member created: {member['full_name']}")
-        
+
         # Now record attendance
         print("   Recording attendance...")
-        
+
         # Get altar ID from the user data
         # For now, we'll assume altar ID is 1 (you may need to adjust this)
         attendance_data = {
@@ -152,17 +152,17 @@ def test_registration_and_attendance():
                 {"member_id": member['id'], "is_present": True}
             ]
         }
-        
+
         attendance_response = requests.post(
             f"{BASE_URL}/api/attendance/record/",
             headers=headers1,
             json=attendance_data,
             timeout=10
         )
-        
+
         if attendance_response.status_code == 201:
             result = attendance_response.json()
-            print(f"   ✅ Attendance recorded successfully!")
+            print("   ✅ Attendance recorded successfully!")
             print(f"      Message: {result['message']}")
             print(f"      Recorded: {result['recorded_count']} members")
         else:

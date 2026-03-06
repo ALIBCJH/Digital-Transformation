@@ -52,13 +52,13 @@ class RegisterSerializer(serializers.ModelSerializer):
         """
         # Normalize the altar name: strip whitespace and convert to title case
         normalized_name = value.strip().title()
-        
+
         if not normalized_name:
             raise serializers.ValidationError("Altar name cannot be empty")
-        
+
         # Try to find existing altar (case-insensitive)
         altar = Altar.objects.filter(name__iexact=normalized_name, is_active=True).first()
-        
+
         if altar:
             # Altar exists - check if it already has an admin
             # An admin is identified by having this altar as their home_altar
@@ -66,13 +66,13 @@ class RegisterSerializer(serializers.ModelSerializer):
                 home_altar=altar,
                 is_active=True
             ).first()
-            
+
             if existing_admin:
                 raise serializers.ValidationError(
                     f"The altar '{altar.name}' already has an admin ({existing_admin.first_name} {existing_admin.last_name}). "
                     f"Each altar can only have one admin. Please contact them or choose a different altar name."
                 )
-            
+
             return {"exists": True, "altar": altar, "name": altar.name}
         else:
             # Altar doesn't exist - will be created with normalized name
