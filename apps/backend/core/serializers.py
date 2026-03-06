@@ -48,16 +48,35 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate_altar(self, value):
         """
         Look up or prepare altar name for creation.
-        CHANGED: Instead of rejecting unknown altars, we now accept them
-        and create them on-the-fly during user creation.
+        Normalizes altar names to ensure consistency (case-insensitive, trim spaces).
         """
-        # Try to find existing altar
-        try:
-            altar = Altar.objects.get(name=value, is_active=True)
-            return {"exists": True, "altar": altar, "name": value}
-        except Altar.DoesNotExist:
-            # NEW: Allow new altar names - they'll be created in create()
-            return {"exists": False, "altar": None, "name": value}
+        # Normalize the altar name: strip whitespace and convert to title case
+        normalized_name = value.strip().title()
+
+        if not normalized_name:
+            raise serializers.ValidationError("Altar name cannot be empty")
+
+        # Try to find existing altar (case-insensitive)
+        altar = Altar.objects.filter(name__iexact=normalized_name, is_active=True).first()
+
+        if altar:
+            # Altar exists - check if it already has an admin
+            # An admin is identified by having this altar as their home_altar
+            existing_admin = User.objects.filter(
+                home_altar=altar,
+                is_active=True
+            ).first()
+
+            if existing_admin:
+                raise serializers.ValidationError(
+                    f"The altar '{altar.name}' already has an admin ({existing_admin.first_name} {existing_admin.last_name}). "
+                    f"Each altar can only have one admin. Please contact them or choose a different altar name."
+                )
+
+            return {"exists": True, "altar": altar, "name": altar.name}
+        else:
+            # Altar doesn't exist - will be created with normalized name
+            return {"exists": False, "altar": None, "name": normalized_name}
 
     def validate(self, attrs):
         if attrs["password"] != attrs["password2"]:
@@ -83,10 +102,10 @@ class RegisterSerializer(serializers.ModelSerializer):
             # Altar already exists
             altar = altar_data["altar"]
         else:
-            # NEW: Create a new altar with a default parent structure
+            # NEW: Create a new altar with normalized name and default parent structure
             import re
 
-            altar_name = altar_data["name"]
+            altar_name = altar_data["name"]  # Already normalized in validate_altar
             # Generate a code from the altar name (e.g., "Nyeri Main" -> "NYERI_MAIN")
             altar_code = re.sub(r'[^a-zA-Z0-9]+', '_', altar_name).upper().strip('_')
 

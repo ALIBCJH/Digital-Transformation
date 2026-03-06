@@ -5,6 +5,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from core.views import (
     AltarDashboardView,
     AltarListView,
+    BulkAttendanceView,
     CreateRegionalAdminView,
     LoginView,
     LogoutView,
@@ -54,16 +55,9 @@ urlpatterns = [
     ),
     path("api/dashboard/altar/", AltarDashboardView.as_view(), name="altar_dashboard"),
     # Attendance endpoints
-    # TODO: Re-enable after creating GetMembersForAttendanceView
-    # path(
-    #     "api/attendance/members/",
-    #     GetMembersForAttendanceView.as_view(),
-    #     name="get_members_for_attendance",
-    # ),
-    # TODO: Re-enable after creating BulkAttendanceView
-    # path(
-    #     "api/attendance/record/", BulkAttendanceView.as_view(), name="bulk_attendance"
-    # ),
+    path(
+        "api/attendance/record/", BulkAttendanceView.as_view(), name="bulk_attendance"
+    ),
     # TODO: Re-enable after creating Guest model
     # path('api/guests/create/', GuestCreateView.as_view(), name='guest_create'),
     # List all available altars

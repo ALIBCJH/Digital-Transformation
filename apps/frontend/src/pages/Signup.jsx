@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authService, altarService } from '../api/services';
+import { authService } from '../api/services';
 
 const Signup = () => {
   const [formData, setFormData] = useState({
@@ -11,28 +11,9 @@ const Signup = () => {
     password: '',
     password2: '',
   });
-  const [altars, setAltars] = useState([]);
-  const [loadingAltars, setLoadingAltars] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-
-  // Fetch altars on component mount
-  useEffect(() => {
-    const fetchAltars = async () => {
-      try {
-        const response = await altarService.list();
-        setAltars(response.altars || response.results || response || []);
-      } catch (err) {
-        console.error('Failed to load altars:', err);
-        // Altars require authentication, so we'll let users type the altar name
-        setAltars([]);
-      } finally {
-        setLoadingAltars(false);
-      }
-    };
-    fetchAltars();
-  }, []);
 
   const handleChange = (e) => {
     setFormData({
@@ -50,8 +31,8 @@ const Signup = () => {
       return;
     }
 
-    if (!formData.altar) {
-      setError('Please select an altar');
+    if (!formData.altar || !formData.altar.trim()) {
+      setError('Please enter your altar name');
       return;
     }
 
@@ -68,7 +49,11 @@ const Signup = () => {
       // Route to admin dashboard for regular admins
       navigate('/admin');
     } catch (err) {
-      setError(err.message || 'Failed to create account. Please try again.');
+      const errorMessage = err.response?.data?.altar?.[0] || 
+                          err.response?.data?.error || 
+                          err.message || 
+                          'Failed to create account. Please try again.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -144,43 +129,25 @@ const Signup = () => {
 
             <div>
               <label htmlFor="altar" className="block text-sm font-semibold text-gray-700 mb-2">
-                Altar
+                Your Altar Name
               </label>
-              {altars.length > 0 ? (
-                <select
-                  id="altar"
-                  name="altar"
-                  required
-                  value={formData.altar}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 transition-all"
-                  disabled={loadingAltars}
-                >
-                  <option value="">Select an altar...</option>
-                  {altars.map((altar) => (
-                    <option key={altar.id} value={altar.name}>
-                      {altar.name} - {altar.city}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  id="altar"
-                  name="altar"
-                  type="text"
-                  required
-                  value={formData.altar}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 transition-all"
-                  placeholder="e.g., Nairobi Central Church, Mombasa Fellowship..."
-                  disabled={loadingAltars}
-                />
-              )}
-              {!loadingAltars && altars.length === 0 && (
-                <p className="text-xs text-blue-600 mt-2 bg-blue-50 p-2 rounded border border-blue-200">
-                  ✨ Enter the name of your altar - it will be created automatically if it doesn't exist yet!
+              <input
+                id="altar"
+                name="altar"
+                type="text"
+                required
+                value={formData.altar}
+                onChange={handleChange}
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 transition-all"
+                placeholder="e.g., Nyeri Main Altar, Nairobi Central Church..."
+              />
+              <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-xs text-blue-800 leading-relaxed">
+                  <span className="font-semibold">💡 Important:</span> Enter the name of the altar you represent. 
+                  Each altar can only have ONE admin. If your altar already has an admin, you cannot sign up for it. 
+                  The name will be automatically formatted (e.g., "nyeri main altar" becomes "Nyeri Main Altar").
                 </p>
-              )}
+              </div>
             </div>
 
             <div>

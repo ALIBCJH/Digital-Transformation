@@ -71,10 +71,25 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Database Configuration
 # ---------------------------------
 
-    # Database Configuration
+# Database Configuration
+# Use DATABASE_URL if provided (for production), otherwise construct from individual variables
+database_url = config('DATABASE_URL', default='')
+
+if not database_url:
+    # Construct DATABASE_URL from individual variables for local development
+    db_engine = config('DB_ENGINE', default='django.db.backends.postgresql')
+    db_name = config('DB_NAME', default='')
+    db_user = config('DB_USER', default='')
+    db_password = config('DB_PASSWORD', default='')
+    db_host = config('DB_HOST', default='localhost')
+    db_port = config('DB_PORT', default='5432')
+
+    if db_name and db_user and db_password:
+        database_url = f'postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
+
 DATABASES = {
     'default': dj_database_url.config(
-        default=config('DATABASE_URL', default=''),
+        default=database_url,
         conn_max_age=600,
         conn_health_checks=True,
     )

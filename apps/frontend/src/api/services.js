@@ -322,6 +322,18 @@ export const attendanceService = {
       : apiConfig.endpoints.attendance.report;
     return await apiClient.get(endpoint);
   },
+
+  /**
+   * Bulk record attendance for multiple members
+   * @param {Object} bulkData - Bulk attendance data
+   * @param {number} bulkData.altar_id - Altar ID
+   * @param {string} bulkData.service_date - Service date (YYYY-MM-DD)
+   * @param {string} bulkData.service_type - Service type
+   * @param {Array} bulkData.attendance - Array of {member_id, is_present}
+   */
+  bulkRecord: async (bulkData) => {
+    return await apiClient.post(apiConfig.endpoints.attendance.record, bulkData);
+  },
 };
 
 // ==================== Dashboard Services ====================
