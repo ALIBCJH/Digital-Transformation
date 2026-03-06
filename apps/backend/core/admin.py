@@ -2,7 +2,6 @@ from django.contrib import admin
 
 # Removed unused imports
 from django.utils.html import format_html
-from django.utils.safestring import mark_safe
 
 from .models import (
     Altar,
@@ -406,14 +405,18 @@ class MemberAdmin(SuperAdminAccessMixin, admin.ModelAdmin):
             member=obj
         ).order_by("-service_date")[:5]
 
-        summary = f"<strong>Total Services Attended:</strong> {total_attendance}<br><br>"
-        summary += "<strong>Recent Attendance:</strong><ul>"
+        # Build list items safely
+        list_items = "".join([
+            format_html("<li>{} - {}</li>", log.service_date, log.get_service_type_display())
+            for log in recent_attendance
+        ])
 
-        for log in recent_attendance:
-            summary += f"<li>{log.service_date} - {log.get_service_type_display()}</li>"
-
-        summary += "</ul>"
-        return mark_safe(summary)
+        return format_html(
+            "<strong>Total Services Attended:</strong> {}<br><br>"
+            "<strong>Recent Attendance:</strong><ul>{}</ul>",
+            total_attendance,
+            list_items
+        )
 
     attendance_summary.short_description = "Attendance Summary"
 
