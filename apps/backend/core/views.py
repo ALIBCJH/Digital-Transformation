@@ -11,6 +11,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 # Ensure these imports are correctly configured in your project
 from core.models import (
     Altar,
+    AttendanceLog,
     Guest,
     Member,
     MemberTransferHistory,
@@ -20,6 +21,7 @@ from core.models import (
 
 from .permissions import CanManageMembers, CanTransferMembers, HasOrganizationalScope
 from .serializers import (
+    BulkAttendanceSerializer,
     LoginSerializer,
     MemberSerializer,
     MemberTransferSerializer,
@@ -841,3 +843,115 @@ class SuperAdminDashboardView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class BulkAttendanceView(APIView):
+    """
+    Endpoint to record attendance for multiple members in one request.
+    """
+
+    permission_classes = [IsAuthenticated, HasOrganizationalScope]
+
+    def post(self, request):
+        """
+        Record attendance for multiple members.
+        Expected payload:
+        {
+            "altar_id": 1,
+            "service_date": "2026-03-06",
+            "service_type": "sunday_service",
+            "attendance": [
+                {"member_id": 1, "is_present": true},
+                {"member_id": 2, "is_present": false}
+            ]
+        }
+        """
+        serializer = BulkAttendanceSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        validated_data = serializer.validated_data
+        altar = validated_data["altar_id"]  # Already validated and returns Altar object
+        service_date = validated_data["service_date"]
+        service_type = validated_data["service_type"]
+        attendance_records = validated_data["attendance"]
+
+        # Check if admin has access to this altar
+        if not request.user.is_superuser:
+            accessible_altars = request.user.get_accessible_altars()
+            if altar not in accessible_altars:
+                return Response(
+                    {"error": "You don't have permission to record attendance for this altar"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        # Get the organizational hierarchy for the altar
+        altar_node = altar.organization_node
+        hierarchy = altar_node.get_ancestors(include_self=False)
+        
+        # Map hierarchy by depth
+        sub_region = None
+        region = None
+        country = None
+        continent = None
+        
+        for node in hierarchy:
+            if node.depth == 2:  # Sub-region
+                sub_region = node
+            elif node.depth == 1:  # Region
+                region = node
+            elif node.depth == 0:  # Country or Continent
+                # Determine if it's country or continent based on context
+                if node.node_type == "country":
+                    country = node
+                elif node.node_type == "continent":
+                    continent = node
+
+        # Create attendance logs
+        attendance_logs = []
+        with transaction.atomic():
+            # First, delete any existing attendance records for this service
+            AttendanceLog.objects.filter(
+                altar=altar,
+                service_date=service_date,
+                service_type=service_type
+            ).delete()
+
+            # Create new attendance records
+            for record in attendance_records:
+                member_id = record["member_id"]
+                is_present = record["is_present"]
+                
+                # Only create records for members marked as present
+                if is_present:
+                    try:
+                        member = Member.objects.get(id=member_id, is_active=True)
+                        attendance_log = AttendanceLog.objects.create(
+                            member=member,
+                            service_date=service_date,
+                            service_type=service_type,
+                            altar=altar,
+                            sub_region=sub_region,
+                            region=region,
+                            country=country,
+                            continent=continent,
+                            recorded_by=request.user,
+                        )
+                        attendance_logs.append(attendance_log)
+                    except Member.DoesNotExist:
+                        continue
+
+        return Response(
+            {
+                "message": "Attendance recorded successfully",
+                "recorded_count": len(attendance_logs),
+                "service_date": service_date,
+                "service_type": service_type,
+                "altar": altar.name,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+

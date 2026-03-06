@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authService, memberService, altarService, guestService } from '../api/services';
+import { authService, memberService, altarService, guestService, attendanceService } from '../api/services';
 
 const AdminDashboard = () => {
   const [user, setUser] = useState(null);
@@ -9,6 +9,9 @@ const AdminDashboard = () => {
   const [altars, setAltars] = useState([]);
   const [loading, setLoading] = useState(false);
   const [attendance, setAttendance] = useState({});
+  const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [serviceType, setServiceType] = useState('sunday_service');
+  const [submitting, setSubmitting] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState(''); // 'member', 'guest', 'offboard'
   const navigate = useNavigate();
@@ -56,10 +59,10 @@ const AdminDashboard = () => {
       setMembers(membersData.results || membersData || []);
       setAltars(altarsData.altars || altarsData.results || altarsData || []);
       
-      // Initialize attendance tracking
+      // Initialize attendance tracking - null means not set, true = present, false = absent
       const initialAttendance = {};
       (membersData.results || membersData || []).forEach(member => {
-        initialAttendance[member.id] = false;
+        initialAttendance[member.id] = null;
       });
       setAttendance(initialAttendance);
     } catch (error) {
@@ -76,19 +79,79 @@ const AdminDashboard = () => {
     navigate('/login');
   };
 
-  const toggleAttendance = (memberId) => {
+  const markPresent = (memberId) => {
     setAttendance(prev => ({
       ...prev,
-      [memberId]: !prev[memberId]
+      [memberId]: true
+    }));
+  };
+
+  const markAbsent = (memberId) => {
+    setAttendance(prev => ({
+      ...prev,
+      [memberId]: false
     }));
   };
 
   const getPresentCount = () => {
-    return Object.values(attendance).filter(present => present).length;
+    return Object.values(attendance).filter(status => status === true).length;
   };
 
   const getAbsentCount = () => {
-    return members.length - getPresentCount();
+    return Object.values(attendance).filter(status => status === false).length;
+  };
+
+  const getNotMarkedCount = () => {
+    return Object.values(attendance).filter(status => status === null).length;
+  };
+
+  const submitAttendance = async () => {
+    // Validate that we have an altar
+    if (!altars || altars.length === 0) {
+      alert('No altar found. Please ensure you have an altar assigned.');
+      return;
+    }
+
+    // Check if at least some attendance is marked
+    const markedCount = Object.values(attendance).filter(status => status !== null).length;
+    if (markedCount === 0) {
+      alert('Please mark attendance for at least one member.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      // Prepare attendance data
+      const attendanceRecords = Object.entries(attendance)
+        .filter(([_, status]) => status !== null)
+        .map(([memberId, isPresent]) => ({
+          member_id: parseInt(memberId),
+          is_present: isPresent
+        }));
+
+      const bulkData = {
+        altar_id: altars[0].id, // Use the first altar (admin's altar)
+        service_date: serviceDate,
+        service_type: serviceType,
+        attendance: attendanceRecords
+      };
+
+      const response = await attendanceService.bulkRecord(bulkData);
+      alert(`Attendance recorded successfully! ${response.recorded_count} members marked as present.`);
+      
+      // Reset attendance after successful submission
+      const resetAttendance = {};
+      members.forEach(member => {
+        resetAttendance[member.id] = null;
+      });
+      setAttendance(resetAttendance);
+      
+    } catch (error) {
+      console.error('Attendance submission error:', error);
+      alert(`Failed to record attendance: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const openModal = (type, memberId = null) => {
@@ -388,6 +451,40 @@ const AdminDashboard = () => {
                   <p className="text-sm text-slate-600 font-medium">Absent</p>
                   <p className="text-2xl font-bold text-red-600">{getAbsentCount()}</p>
                 </div>
+                <div className="bg-white rounded-xl px-6 py-3 shadow-md border border-slate-200">
+                  <p className="text-sm text-slate-600 font-medium">Not Marked</p>
+                  <p className="text-2xl font-bold text-slate-600">{getNotMarkedCount()}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Service Details */}
+            <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200 mb-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Service Details</h3>
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Service Date</label>
+                  <input
+                    type="date"
+                    value={serviceDate}
+                    onChange={(e) => setServiceDate(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Service Type</label>
+                  <select
+                    value={serviceType}
+                    onChange={(e) => setServiceType(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="sunday_service">Sunday Service</option>
+                    <option value="midweek_service">Midweek Service</option>
+                    <option value="special_service">Special Service</option>
+                    <option value="prayer_meeting">Prayer Meeting</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -399,22 +496,7 @@ const AdminDashboard = () => {
                       <th className="px-8 py-5 text-left text-sm font-bold text-slate-700 uppercase tracking-wider">Member Name</th>
                       <th className="px-8 py-5 text-left text-sm font-bold text-slate-700 uppercase tracking-wider">Phone Number</th>
                       <th className="px-8 py-5 text-left text-sm font-bold text-slate-700 uppercase tracking-wider">Altar</th>
-                      <th className="px-8 py-5 text-center text-sm font-bold text-slate-700 uppercase tracking-wider">
-                        <div className="flex justify-center items-center space-x-8">
-                          <div className="flex items-center space-x-2">
-                            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span className="text-green-600">Present</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                            <span className="text-red-600">Absent</span>
-                          </div>
-                        </div>
-                      </th>
+                      <th className="px-8 py-5 text-center text-sm font-bold text-slate-700 uppercase tracking-wider">Attendance Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -438,24 +520,36 @@ const AdminDashboard = () => {
                             {member.home_altar || 'N/A'}
                           </td>
                           <td className="px-8 py-5">
-                            <div className="flex justify-center">
+                            <div className="flex justify-center items-center space-x-3">
                               <button
-                                onClick={() => toggleAttendance(member.id)}
-                                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 transform hover:scale-110 shadow-lg ${
-                                  attendance[member.id]
-                                    ? 'bg-gradient-to-br from-green-400 to-green-600 text-white'
-                                    : 'bg-gradient-to-br from-red-400 to-red-600 text-white'
+                                onClick={() => markPresent(member.id)}
+                                className={`px-6 py-2.5 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-md ${
+                                  attendance[member.id] === true
+                                    ? 'bg-gradient-to-r from-green-500 to-green-600 text-white ring-2 ring-green-400'
+                                    : 'bg-white text-green-600 border-2 border-green-300 hover:bg-green-50'
                                 }`}
                               >
-                                {attendance[member.id] ? (
-                                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                {attendance[member.id] === true && (
+                                  <svg className="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                   </svg>
-                                ) : (
-                                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                )}
+                                Present
+                              </button>
+                              <button
+                                onClick={() => markAbsent(member.id)}
+                                className={`px-6 py-2.5 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 shadow-md ${
+                                  attendance[member.id] === false
+                                    ? 'bg-gradient-to-r from-red-500 to-red-600 text-white ring-2 ring-red-400'
+                                    : 'bg-white text-red-600 border-2 border-red-300 hover:bg-red-50'
+                                }`}
+                              >
+                                {attendance[member.id] === false && (
+                                  <svg className="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
                                   </svg>
                                 )}
+                                Absent
                               </button>
                             </div>
                           </td>
@@ -471,6 +565,36 @@ const AdminDashboard = () => {
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            {/* Submit Button */}
+            <div className="flex justify-center mt-8">
+              <button
+                onClick={submitAttendance}
+                disabled={submitting}
+                className={`px-12 py-4 rounded-xl font-bold text-lg transition-all duration-200 transform hover:scale-105 shadow-xl ${
+                  submitting
+                    ? 'bg-slate-400 text-slate-200 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700'
+                }`}
+              >
+                {submitting ? (
+                  <>
+                    <svg className="animate-spin h-6 w-6 inline mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-6 h-6 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Submit Attendance
+                  </>
+                )}
+              </button>
             </div>
           </div>
         )}
