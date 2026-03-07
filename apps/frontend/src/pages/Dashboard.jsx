@@ -123,7 +123,7 @@ const AdminDashboard = () => {
     try {
       // Prepare attendance data
       const attendanceRecords = Object.entries(attendance)
-        .filter(([_, status]) => status !== null)
+        .filter(([, status]) => status !== null)
         .map(([memberId, isPresent]) => ({
           member_id: parseInt(memberId),
           is_present: isPresent
