@@ -16,12 +16,12 @@ echo "════════════════════════�
 echo "Started at: $(date)"
 echo ""
 
-echo "📋 Step 1/6: Initial wait for container stability (60s)..."
+echo "📋 Step 1/7: Initial wait for container stability (60s)..."
 sleep 60
 echo "✅ Wait completed"
 echo ""
 
-echo "📋 Step 2/6: Locating backend container..."
+echo "📋 Step 2/7: Locating backend container..."
 CONTAINER_ID=$(docker ps -q --filter 'name=backend' --filter 'status=running')
 if [ -z "$CONTAINER_ID" ]; then
   echo "❌ ERROR: Backend container not found"
@@ -33,7 +33,7 @@ CONTAINER_NAME=$(docker inspect --format='{{.Name}}' "$CONTAINER_ID" | sed 's/\/
 echo "✅ Found container: $CONTAINER_NAME (ID: $CONTAINER_ID)"
 echo ""
 
-echo "📋 Step 3/6: Verifying container health..."
+echo "📋 Step 3/7: Verifying container health..."
 HEALTH_RETRIES=0
 MAX_HEALTH_RETRIES=9
 while [ $HEALTH_RETRIES -lt $MAX_HEALTH_RETRIES ]; do
@@ -51,7 +51,7 @@ if [ $HEALTH_RETRIES -eq $MAX_HEALTH_RETRIES ] && [ "$HEALTH_STATUS" != "healthy
 fi
 echo ""
 
-echo "📋 Step 4/6: Testing database connectivity (with retry)..."
+echo "📋 Step 4/7: Testing database connectivity (with retry)..."
 DB_RETRIES=0
 MAX_DB_RETRIES=3
 DB_CONNECTED=false
@@ -77,11 +77,11 @@ if [ "$DB_CONNECTED" != "true" ]; then
 fi
 echo ""
 
-echo "📋 Step 5/6: Checking current migration status..."
+echo "📋 Step 5/7: Checking current migration status..."
 docker exec "$CONTAINER_ID" python manage.py showmigrations --plan | head -n 20
 echo ""
 
-echo "📋 Step 6/6: Executing database migrations..."
+echo "📋 Step 6/7: Executing database migrations..."
 echo "⚙️  Running: python manage.py migrate --noinput"
 if docker exec "$CONTAINER_ID" python manage.py migrate --noinput 2>&1; then
   echo ""
@@ -89,6 +89,14 @@ if docker exec "$CONTAINER_ID" python manage.py migrate --noinput 2>&1; then
   echo ""
   echo "📊 Post-migration status:"
   docker exec "$CONTAINER_ID" python manage.py showmigrations | grep -E '^\[X\]' | wc -l | xargs echo "Applied migrations:"
+  echo ""
+  echo "📋 Step 7/7: Setting up Super Admin accounts..."
+  echo "⚙️  Running: python manage.py setup_superadmins --skip-existing"
+  if docker exec "$CONTAINER_ID" python manage.py setup_superadmins --skip-existing 2>&1; then
+    echo "✅ Super Admin setup completed"
+  else
+    echo "⚠️  WARNING: Super Admin setup failed, but continuing deployment"
+  fi
   echo ""
   echo "🎯 Collecting static files..."
   docker exec "$CONTAINER_ID" python manage.py collectstatic --noinput --clear 2>&1 | tail -n 5
