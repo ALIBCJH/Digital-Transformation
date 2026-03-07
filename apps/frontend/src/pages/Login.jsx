@@ -49,17 +49,28 @@ const Login = () => {
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
-          <h1 className="text-4xl font-bold mb-2">
+          <div className="inline-block mb-4">
+            <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2 rounded-full font-bold text-sm tracking-wide shadow-lg">
+              👤 ADMIN PORTAL
+            </div>
+          </div>
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">
+            Altar Admin Login
           </h1>
-          <h2 className="text-5xl font-bold mb-4">
-          </h2>
+          <p className="text-gray-600 text-sm">
+            Manage your altar members and activities
+          </p>
         </div>
 
         {/* Login Form */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-blue-100">
-          <h3 className="text-2xl font-semibold text-gray-800 mb-6 text-center">
-            Welcome Back
-          </h3>
+          <div className="flex items-center justify-center mb-6">
+            <div className="h-1 w-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded"></div>
+            <h3 className="text-2xl font-semibold text-gray-800 mx-4">
+              Sign In
+            </h3>
+            <div className="h-1 w-12 bg-gradient-to-r from-cyan-500 to-blue-500 rounded"></div>
+          </div>
 
           {error && (
             <div className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-lg mb-4">
@@ -136,6 +147,23 @@ const Login = () => {
                 Sign up
               </Link>
             </p>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="text-center">
+              <p className="text-xs text-gray-500 mb-2">
+                Super Administrator?
+              </p>
+              <Link 
+                to="/super-admin/login" 
+                className="inline-flex items-center text-sm font-semibold text-purple-600 hover:text-purple-700 transition-colors"
+              >
+                🛡️ Super Admin Portal
+                <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
           </div>
         </div>
       </div>
