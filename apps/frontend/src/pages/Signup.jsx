@@ -62,13 +62,30 @@ const Signup = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-gray-50 to-blue-100 px-4 py-12">
       <div className="max-w-md w-full space-y-8">
-    
+        {/* Header */}
+        <div className="text-center">
+          <div className="inline-block mb-4">
+            <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2 rounded-full font-bold text-sm tracking-wide shadow-lg">
+              📝 ADMIN REGISTRATION
+            </div>
+          </div>
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">
+            Become an Altar Admin
+          </h1>
+          <p className="text-gray-600 text-sm">
+            Register to manage your altar's members and activities
+          </p>
+        </div>
 
         {/* Signup Form */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-blue-100">
-          <h3 className="text-2xl font-semibold text-gray-800 mb-6 text-center">
-            Create Your Account
-          </h3>
+          <div className="flex items-center justify-center mb-6">
+            <div className="h-1 w-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded"></div>
+            <h3 className="text-2xl font-semibold text-gray-800 mx-4">
+              Create Account
+            </h3>
+            <div className="h-1 w-12 bg-gradient-to-r from-cyan-500 to-blue-500 rounded"></div>
+          </div>
 
           {error && (
             <div className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-lg mb-4">
@@ -198,6 +215,19 @@ const Signup = () => {
                 Sign in
               </Link>
             </p>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+              <p className="text-xs text-purple-800 leading-relaxed">
+                <span className="font-semibold">ℹ️ Note for Super Administrators:</span> Super admin accounts 
+                cannot be created through this form. They are provisioned by the system administrator. 
+                If you are a super admin, please use the{' '}
+                <Link to="/super-admin/login" className="font-semibold underline hover:text-purple-900">
+                  Super Admin Portal
+                </Link>.
+              </p>
+            </div>
           </div>
         </div>
       </div>
