@@ -1,4 +1,4 @@
-name: Infrastructure & Deployment Pipeline
+name: Application CI/CD Pipeline
 
 on:
   push:
@@ -6,12 +6,6 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch: # Manual trigger
-    inputs:
-      force_unlock:
-        description: 'Force unlock Terraform state (enter lock ID or leave empty)'
-        required: false
-        default: ''
-        type: string
 
 permissions:
   contents: read
@@ -26,319 +20,16 @@ env:
   BACKEND_IMAGE_NAME: alibcjh/digital-transformation-backend
   FRONTEND_IMAGE_NAME: alibcjh/digital-transformation-frontend
   AWS_REGION: eu-north-1
-  TERRAFORM_VERSION: '1.7.0'
-  TERRAFORM_DIR: './Infra/aws'
 
 jobs:
   # ==========================================
-  # JOB 1: TERRAFORM INFRASTRUCTURE
+  # NOTE: Terraform infrastructure is now managed in a separate workflow
+  # See: .github/workflows/terraform.yml
+  # This workflow focuses on application deployment only
   # ==========================================
-  terraform:
-    name: Terraform Plan & Apply
-    runs-on: ubuntu-latest
-    outputs:
-      ec2_instance_id: ${{ steps.tf_output.outputs.instance_id }}
-      rds_endpoint: ${{ steps.tf_output.outputs.rds_endpoint }}
-      
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-          terraform_wrapper: true
-
-      - name: Configure AWS Credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Terraform Format Check
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: terraform fmt -check
-        continue-on-error: true
-
-      - name: Terraform Init
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: terraform init
-
-      - name: Manual Force Unlock (if requested)
-        if: github.event.inputs.force_unlock != ''
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: |
-          echo "Force unlocking state with Lock ID: ${{ github.event.inputs.force_unlock }}"
-          terraform force-unlock -force "${{ github.event.inputs.force_unlock }}"
-          echo "✅ State unlocked successfully"
-
-      - name: Import Existing Resources (if needed)
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        continue-on-error: true
-        run: |
-          # Import existing resources that were created locally
-          terraform import aws_s3_bucket.terraform_state juma-terraform-state-storage-2026 || true
-          terraform import aws_dynamodb_table.terraform_locks terraform-state-locking || true
-          terraform import aws_iam_role.ec2_ssm_role juma-ec2-ssm-role-v3 || true
-          terraform import aws_iam_role_policy_attachment.ssm_policy juma-ec2-ssm-role-v3/arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore || true
-          terraform import aws_iam_instance_profile.ssm_profile juma-ssm-instance-profile-v3 || true
-          terraform import aws_key_pair.generated_key juma-stockholm-key-v3 || true
-
-      - name: Terraform Validate
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: terraform validate
-
-      - name: Skip Terraform on Feature Branches
-        if: github.ref != 'refs/heads/main' && github.event_name != 'pull_request'
-        run: |
-          echo "ℹ️  Terraform plan/apply skipped on feature branch to avoid state lock conflicts"
-          echo "✅ Terraform validation passed"
-          echo ""
-          echo "📝 Note: Terraform will run when:"
-          echo "  1. You create a Pull Request (plan only)"
-          echo "  2. You merge to main branch (plan + apply)"
-          echo ""
-          echo "This prevents concurrent Terraform operations from conflicting."
-
-      - name: Proactive Stale Lock Cleanup
-        if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        continue-on-error: true
-        run: |
-          echo "🔍 Checking for stale Terraform locks..."
-          
-          # Query DynamoDB for any existing locks
-          LOCK_INFO=$(aws dynamodb get-item \
-            --table-name terraform-state-locking \
-            --key '{"LockID": {"S": "juma-terraform-state-storage-2026/digital-transformation/terraform.tfstate-md5"}}' \
-            --output json 2>/dev/null || echo '{}')
-          
-          if echo "$LOCK_INFO" | grep -q '"Item"'; then
-            echo "⚠️  Found existing lock in DynamoDB"
-            echo "$LOCK_INFO" | jq -r '.Item.Info.S' || true
-            
-            # Extract lock ID from DynamoDB
-            LOCK_ID=$(echo "$LOCK_INFO" | jq -r '.Item.LockID.S' 2>/dev/null || echo "")
-            
-            if [ -n "$LOCK_ID" ]; then
-              echo "🔓 Attempting to clear stale lock: $LOCK_ID"
-              # Force unlock using Terraform
-              terraform force-unlock -force "$LOCK_ID" || echo "Could not unlock via terraform"
-              
-              # Fallback: Delete directly from DynamoDB
-              aws dynamodb delete-item \
-                --table-name terraform-state-locking \
-                --key '{"LockID": {"S": "juma-terraform-state-storage-2026/digital-transformation/terraform.tfstate-md5"}}' \
-                2>/dev/null || true
-              
-              echo "✅ Lock cleanup attempted"
-              sleep 3
-            fi
-          else
-            echo "✅ No existing locks found - ready to proceed"
-          fi
-
-      - name: Terraform Plan
-        id: plan
-        # Skip terraform plan on feature branches (except PRs) to avoid lock conflicts
-        if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: |
-          terraform plan \
-            -var="db_password=${{ secrets.DB_PASSWORD }}" \
-            -out=tfplan \
-            -no-color | tee plan_output.txt
-        continue-on-error: true
-
-      - name: Cleanup Lock After Plan Failure
-        if: (github.ref == 'refs/heads/main' || github.event_name == 'pull_request') && steps.plan.outcome == 'failure'
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        continue-on-error: true
-        run: |
-          echo "⚠️  Plan failed - checking for locks to clean up..."
-          # Extract lock ID from error message if present
-          LOCK_ID=$(grep -oP 'ID:\s+\K[a-f0-9-]+' plan_output.txt || echo "")
-          if [ -n "$LOCK_ID" ]; then
-            echo "🔓 Found lock in error output: $LOCK_ID"
-            echo "Attempting to force unlock..."
-            terraform force-unlock -force "$LOCK_ID" || echo "Could not unlock via terraform"
-            
-            # Fallback: Try DynamoDB direct delete
-            aws dynamodb delete-item \
-              --table-name terraform-state-locking \
-              --key '{"LockID": {"S": "juma-terraform-state-storage-2026/digital-transformation/terraform.tfstate-md5"}}' \
-              2>/dev/null || true
-            
-            echo "✅ Lock cleanup completed"
-            sleep 5
-          else
-            echo "ℹ️  No lock ID found in error output"
-          fi
-
-      - name: Retry Terraform Plan (After Lock Cleanup)
-        if: (github.ref == 'refs/heads/main' || github.event_name == 'pull_request') && steps.plan.outcome == 'failure'
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: |
-          echo "🔄 Retrying plan after lock cleanup (attempt 2)..."
-          sleep 3
-          terraform plan \
-            -var="db_password=${{ secrets.DB_PASSWORD }}" \
-            -out=tfplan \
-            -no-color | tee plan_output_retry.txt
-        continue-on-error: true
-
-      - name: Final Retry Terraform Plan (Last Attempt)
-        id: plan_final
-        if: (github.ref == 'refs/heads/main' || github.event_name == 'pull_request') && steps.plan.outcome == 'failure'
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: |
-          echo "🔄 Final retry attempt (attempt 3)..."
-          sleep 5
-          terraform plan \
-            -var="db_password=${{ secrets.DB_PASSWORD }}" \
-            -out=tfplan \
-            -no-color | tee plan_output_final.txt
-
-      - name: Upload Terraform Plan
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan
-          path: ${{ env.TERRAFORM_DIR }}/tfplan
-          retention-days: 5
-
-      - name: Terraform Plan Status Check
-        if: (github.ref == 'refs/heads/main' || github.event_name == 'pull_request') && steps.plan.outcome == 'failure' && (steps.plan_final.outcome == 'failure' || steps.plan_final.outcome == '')
-        run: |
-          echo "::error::Terraform Plan Failed after 3 attempts"
-          echo "Please check for persistent state locks and manually unlock if needed"
-          echo "Command: terraform force-unlock <LOCK_ID>"
-          exit 1
-
-      - name: Generate Plan Summary
-        if: always()
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: |
-          echo "### 🏗️ Terraform Plan Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Check if terraform was skipped
-          if [ "${{ github.ref }}" != "refs/heads/main" ] && [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "**Status**: ⏭️ Skipped (Feature Branch)" >> $GITHUB_STEP_SUMMARY
-            echo "**Reason**: Terraform only runs on PRs and main branch to prevent lock conflicts" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "**Status**: ${{ steps.plan.outcome }}" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          echo "**Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Triggered by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -f plan_output.txt ]; then
-            echo "<details><summary>View Terraform Plan</summary>" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo '```terraform' >> $GITHUB_STEP_SUMMARY
-            cat plan_output.txt >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "</details>" >> $GITHUB_STEP_SUMMARY
-          elif [ -f plan_output_final.txt ]; then
-            echo "<details><summary>View Terraform Plan (Final Retry)</summary>" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo '```terraform' >> $GITHUB_STEP_SUMMARY
-            cat plan_output_final.txt >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "</details>" >> $GITHUB_STEP_SUMMARY
-          fi
-
-      - name: Comment PR with Terraform Plan
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const planOutput = fs.existsSync('${{ env.TERRAFORM_DIR }}/plan_output.txt') 
-              ? fs.readFileSync('${{ env.TERRAFORM_DIR }}/plan_output.txt', 'utf8')
-              : 'Plan output not available';
-            
-            const output = `#### 🏗️ Terraform Plan Results
-            
-            **Status**: ${{ steps.plan.outcome }}
-            **Triggered by**: @${{ github.actor }}
-            
-            <details><summary>View Full Terraform Plan</summary>
-            
-            \`\`\`terraform
-            ${planOutput}
-            \`\`\`
-            
-            </details>
-            
-            ---
-            **Next Steps**: 
-            - Review the plan above
-            - If changes look good, approve and merge this PR
-            - Merging to \`main\` will automatically apply these changes
-            
-            *Workflow run: [${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*`;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
-
-      - name: Wait Before Apply (Prevent Lock Race Condition)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          echo "⏳ Waiting 10 seconds to ensure plan lock is fully released..."
-          sleep 10
-
-      - name: Terraform Apply
-        # Only apply on main branch, not on PRs
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        id: apply
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        timeout-minutes: 30
-        run: |
-          echo "🚀 Starting Terraform Apply..."
-          terraform apply -auto-approve \
-            -var="db_password=${{ secrets.DB_PASSWORD }}"
-          echo "✅ Terraform Apply completed successfully"
-
-      - name: Cleanup Locks on Failure
-        if: always() && (steps.apply.outcome == 'failure' || steps.apply.outcome == 'cancelled')
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: |
-          echo "⚠️  Apply failed or was cancelled. Cleaning up locks..."
-          
-          # Try to unlock via DynamoDB
-          aws dynamodb delete-item \
-            --table-name terraform-state-locking \
-            --key '{"LockID": {"S": "juma-terraform-state-storage-2026/digital-transformation/terraform.tfstate-md5"}}' \
-            2>/dev/null || true
-          
-          echo "✅ Lock cleanup attempted"
-          echo "If there's a persistent lock, check DynamoDB table: terraform-state-locking"
-
-      - name: Capture Terraform Outputs
-        id: tf_output
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        working-directory: ${{ env.TERRAFORM_DIR }}
-        run: |
-          echo "instance_id=$(terraform output -raw ec2_instance_id || echo '')" >> $GITHUB_OUTPUT
-          echo "rds_endpoint=$(terraform output -raw rds_endpoint || echo '')" >> $GITHUB_OUTPUT
-          echo "ec2_public_ip=$(terraform output -raw ec2_public_ip || echo '')" >> $GITHUB_OUTPUT
-          
-      - name: Display Captured Outputs
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          echo "Instance ID: ${{ steps.tf_output.outputs.instance_id }}"
-          echo "RDS Endpoint: ${{ steps.tf_output.outputs.rds_endpoint }}"
-          echo "EC2 Public IP: ${{ steps.tf_output.outputs.ec2_public_ip }}"
-
+  
   # ==========================================
-  # JOB 2: TEST & LINT
+  # JOB 1: TEST & LINT
   # ==========================================
   test-and-lint:
     name: Test & Lint Application
@@ -381,11 +72,11 @@ jobs:
           python manage.py test
 
   # ==========================================
-  # JOB 3: BUILD & PUSH DOCKER IMAGES
+  # JOB 2: BUILD & PUSH DOCKER IMAGES
   # ==========================================
   build-and-push-docker:
     name: Build & Push Docker Images
-    needs: [terraform, test-and-lint]
+    needs: [test-and-lint]
     runs-on: ubuntu-latest
     
     steps:
@@ -447,11 +138,11 @@ jobs:
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:buildcache,mode=max
 
   # ==========================================
-  # JOB 4: DEPLOY TO AWS EC2
+  # JOB 3: DEPLOY TO AWS EC2
   # ==========================================
   deploy-to-aws:
     name: Deploy to AWS EC2
-    needs: [terraform, build-and-push-docker]
+    needs: [build-and-push-docker]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     
@@ -468,18 +159,17 @@ jobs:
       - name: Validate Instance ID
         id: validate_instance
         run: |
-          TERRAFORM_INSTANCE='${{ needs.terraform.outputs.ec2_instance_id }}'
-          FALLBACK_INSTANCE='${{ secrets.EC2_INSTANCE_ID }}'
+          # Note: Since Terraform runs in a separate workflow, we use the EC2_INSTANCE_ID secret
+          # Make sure this secret is set in your repository settings
+          INSTANCE_ID='${{ secrets.EC2_INSTANCE_ID }}'
           
-          # Use Terraform output if valid, otherwise use fallback
-          if [[ "$TERRAFORM_INSTANCE" =~ ^i-[a-f0-9]{17}$ ]]; then
-            echo "Using Terraform output: $TERRAFORM_INSTANCE"
-            echo "instance_id=$TERRAFORM_INSTANCE" >> $GITHUB_OUTPUT
-          elif [[ "$FALLBACK_INSTANCE" =~ ^i-[a-f0-9]{17}$ ]]; then
-            echo "Using fallback secret: $FALLBACK_INSTANCE"
-            echo "instance_id=$FALLBACK_INSTANCE" >> $GITHUB_OUTPUT
+          if [[ "$INSTANCE_ID" =~ ^i-[a-f0-9]{17}$ ]]; then
+            echo "✅ Using EC2 Instance ID from secrets: $INSTANCE_ID"
+            echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
           else
-            echo "::error::No valid EC2 instance ID found. Terraform output: '$TERRAFORM_INSTANCE', Fallback: '$FALLBACK_INSTANCE'"
+            echo "::error::No valid EC2 instance ID found in secrets.EC2_INSTANCE_ID"
+            echo "::error::Please ensure EC2_INSTANCE_ID is set in repository secrets"
+            echo "::error::Current value: '$INSTANCE_ID'"
             exit 1
           fi
 
