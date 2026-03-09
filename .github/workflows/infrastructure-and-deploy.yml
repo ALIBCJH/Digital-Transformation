@@ -159,16 +159,16 @@ jobs:
       - name: Validate Instance ID
         id: validate_instance
         run: |
-          # Note: Since Terraform runs in a separate workflow, we use the EC2_INSTANCE_ID secret
+          # Note: Since Terraform runs in a separate workflow, we use the INSTANCE_ID secret
           # Make sure this secret is set in your repository settings
-          INSTANCE_ID='${{ secrets.EC2_INSTANCE_ID }}'
+          INSTANCE_ID='${{ secrets.INSTANCE_ID }}'
           
           if [[ "$INSTANCE_ID" =~ ^i-[a-f0-9]{17}$ ]]; then
             echo "✅ Using EC2 Instance ID from secrets: $INSTANCE_ID"
             echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
           else
-            echo "::error::No valid EC2 instance ID found in secrets.EC2_INSTANCE_ID"
-            echo "::error::Please ensure EC2_INSTANCE_ID is set in repository secrets"
+            echo "::error::No valid EC2 instance ID found in secrets.INSTANCE_ID"
+            echo "::error::Please ensure INSTANCE_ID is set in repository secrets"
             echo "::error::Current value: '$INSTANCE_ID'"
             exit 1
           fi
